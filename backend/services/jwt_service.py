@@ -9,6 +9,17 @@ from config.settings import (
 )
 
 
+# Checked here rather than in config.settings so that processes
+# which never issue tokens (e.g. the Pi vision runtime) can still
+# import the shared settings.
+if not JWT_SECRET_KEY or not JWT_SECRET_KEY.strip():
+    raise RuntimeError(
+        "JWT_SECRET_KEY is not set. Add a long random value to "
+        "backend/.env, e.g. the output of: "
+        "python -c \"import secrets; print(secrets.token_urlsafe(48))\""
+    )
+
+
 def create_access_token(user):
     expire = datetime.now(timezone.utc) + timedelta(
         minutes=JWT_EXPIRE_MINUTES

@@ -27,6 +27,12 @@ from services.ticket_service import (
     reopen_ticket,
 )
 
+from services.fan_service import (
+    get_latest_fan_motion_observation,
+    extract_fan_current,
+    extract_fan_motion,
+)
+
 from services.temporal_processor import (
     add_observation,
     is_recovered,
@@ -92,27 +98,20 @@ def get_latest_occupancy_observation(room_id):
     )
 
 
-def get_latest_fan_motion_observation(room_id):
-    return get_latest_vision_observation(
-        room_id=room_id,
-        observation_type="FAN_MOTION"
-    )
-
-
 # ---------------------------------------------------------
 # FAN FAILURE VERIFICATION
 # ---------------------------------------------------------
 
 def verify_fan_failure(
     room_id,
-    device_name
+    device_id
 ):
     electrical_observation = get_latest_electrical_observation(
         room_id
     )
 
     vision_observation = get_latest_fan_motion_observation(
-        room_id
+        device_id
     )
 
     if (
@@ -126,18 +125,12 @@ def verify_fan_failure(
             "evidence": {}
         }
 
-    electrical_data = electrical_observation[5]
-    vision_data = vision_observation[5]
-
-    fan_current = electrical_data.get("fan_current")
-
-    fan_motion_data = vision_data.get(
-        "fan_motion",
-        {}
+    fan_current = extract_fan_current(
+        electrical_observation
     )
 
-    fan_motion = fan_motion_data.get(
-        device_name
+    fan_motion = extract_fan_motion(
+        vision_observation
     )
 
     if fan_current is None or fan_motion is None:
@@ -365,11 +358,9 @@ def verify_ticket(
                 "Fan device not found."
             )
 
-        device_name = device[3]
-
         result = verify_fan_failure(
             room_id=room_id,
-            device_name=device_name
+            device_id=device_id
         )
 
     elif fault_type == FAULT_LIGHTS_LEFT_ON:

@@ -223,3 +223,33 @@ def get_recent_vision_observations(
     finally:
         cursor.close()
         conn.close()
+
+def get_latest_device_vision_observation(
+    device_id,
+    observation_type
+):
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute("""
+            SELECT
+                vision_observation_id,
+                room_id,
+                device_id,
+                observed_at,
+                observation_type,
+                observation_data,
+                created_at
+            FROM vision_observations
+            WHERE device_id = %s
+              AND observation_type = %s
+            ORDER BY observed_at DESC
+            LIMIT 1
+        """, (device_id, observation_type))
+
+        return cursor.fetchone()
+
+    finally:
+        cursor.close()
+        conn.close()

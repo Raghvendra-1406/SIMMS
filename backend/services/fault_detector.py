@@ -1,5 +1,9 @@
 from datetime import datetime, timezone
 
+from database.connection import (
+    transaction,
+)
+
 from database.repositories.fault_repository import (
     create_fault_event,
     get_active_faults_by_room,
@@ -89,7 +93,8 @@ def create_confirmed_fault(
     device_id,
     fault_type,
     confidence=None,
-    abnormal_count=None
+    abnormal_count=None,
+    recurrence_type=None
 ):
     existing_fault = get_active_fault(
         room_id=room_id,
@@ -102,19 +107,21 @@ def create_confirmed_fault(
 
     detected_at = datetime.now(timezone.utc)
 
-    fault = create_fault_event(
-        room_id=room_id,
-        device_id=device_id,
-        fault_type=fault_type,
-        detected_at=detected_at,
-        confidence=confidence,
-        abnormal_count=abnormal_count
-    )
+    with transaction():
+        fault = create_fault_event(
+            room_id=room_id,
+            device_id=device_id,
+            fault_type=fault_type,
+            detected_at=detected_at,
+            confidence=confidence,
+            abnormal_count=abnormal_count,
+            recurrence_type=recurrence_type
+        )
 
-    confirmed_fault = confirm_fault(
-        fault_id=fault[0],
-        confirmed_at=datetime.now(timezone.utc)
-    )
+        confirmed_fault = confirm_fault(
+            fault_id=fault[0],
+            confirmed_at=datetime.now(timezone.utc)
+        )
 
     return confirmed_fault
 

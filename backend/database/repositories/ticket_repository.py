@@ -454,3 +454,34 @@ def get_latest_resolved_ticket_for_fault_identity(
     finally:
         cursor.close()
         conn.close()
+
+def get_hours_since_resolution(ticket_id):
+    """
+    Hours between the ticket's resolved_at and now, computed by
+    PostgreSQL so both timestamps use the same clock and timezone.
+    """
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute("""
+            SELECT
+                EXTRACT(
+                    EPOCH FROM (CURRENT_TIMESTAMP - resolved_at)
+                ) / 3600
+            FROM tickets
+            WHERE ticket_id = %s
+              AND resolved_at IS NOT NULL
+        """, (ticket_id,))
+
+        row = cursor.fetchone()
+
+        if row is None or row[0] is None:
+            return None
+
+        return float(row[0])
+
+    finally:
+        cursor.close()
+        conn.close()

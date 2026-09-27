@@ -7,8 +7,12 @@ from database.repositories.ticket_repository import (
     update_ticket_status,
     update_ticket_priority,
     update_maintenance_notes,
-    get_latest_closed_ticket_for_fault_identity,
     get_latest_resolved_ticket_for_fault_identity,
+    get_hours_since_resolution,
+)
+
+from database.connection import (
+    transaction,
 )
 
 from database.repositories.ticket_history_repository import (
@@ -26,6 +30,10 @@ from database.repositories.user_repository import (
 
 from services.notification_service import (
     create_system_notification,
+)
+
+from services.temporal_processor import (
+    clear_window,
 )
 
 from config.settings import (
@@ -109,14 +117,19 @@ def determine_priority(fault_type):
 
 
 def check_post_repair_recurrence(
-    fault_id
+    room_id,
+    fault_type,
+    device_id=None
 ):
-    fault = get_fault(fault_id)
+    """
+    Decide whether a newly confirmed fault is the same fault
+    coming back shortly after its ticket was RESOLVED.
 
-    room_id = fault[1]
-    device_id = fault[2]
-    fault_type = fault[3]
-    detected_at = fault[4]
+    Checked by fault identity (room, fault type, device) before
+    any new fault row is created, so a recurrence reopens the
+    original fault and ticket instead of leaving a new fault
+    without a ticket.
+    """
 
     previous_ticket = (
         get_latest_resolved_ticket_for_fault_identity(
@@ -134,23 +147,17 @@ def check_post_repair_recurrence(
             "hours_since_resolution": None
         }
 
-    resolved_at = previous_ticket[5]
+    hours_since_resolution = get_hours_since_resolution(
+        previous_ticket[0]
+    )
 
-    if resolved_at is None:
+    if hours_since_resolution is None:
         return {
             "is_recurrence": False,
             "classification": "NEW_FAULT",
             "previous_ticket": previous_ticket,
             "hours_since_resolution": None
         }
-
-    time_since_resolution = (
-        detected_at - resolved_at
-    )
-
-    hours_since_resolution = (
-        time_since_resolution.total_seconds() / 3600
-    )
 
     if (
         0 <= hours_since_resolution
@@ -327,31 +334,32 @@ def reopen_existing_ticket_for_recurrence(
             "for post-repair recurrence."
         )
 
-    updated_ticket = update_ticket_status(
-        ticket_id=ticket_id,
-        status="REOPENED"
-    )
-
-    create_ticket_history(
-        ticket_id=ticket_id,
-        previous_status="RESOLVED",
-        new_status="REOPENED",
-        changed_by=changed_by,
-        note=(
-            "Ticket reopened because the same fault "
-            "recurred during the post-repair verification period."
+    with transaction():
+        updated_ticket = update_ticket_status(
+            ticket_id=ticket_id,
+            status="REOPENED"
         )
-    )
 
-    update_fault_status(
-        fault_id=ticket[1],
-        status="REOPENED"
-    )
+        create_ticket_history(
+            ticket_id=ticket_id,
+            previous_status="RESOLVED",
+            new_status="REOPENED",
+            changed_by=changed_by,
+            note=(
+                "Ticket reopened because the same fault "
+                "recurred during the post-repair verification period."
+            )
+        )
 
-    create_recurrence_notification(
-        ticket=updated_ticket,
-        fault=fault
-    )
+        update_fault_status(
+            fault_id=ticket[1],
+            status="REOPENED"
+        )
+
+        create_recurrence_notification(
+            ticket=updated_ticket,
+            fault=fault
+        )
 
     return updated_ticket
 
@@ -391,66 +399,27 @@ def create_fault_ticket(
 
     validate_priority(priority)
 
-    ticket = create_ticket(
-        fault_id=fault_id,
-        priority=priority,
-        status="OPEN"
-    )
-
-    create_ticket_history(
-        ticket_id=ticket[0],
-        previous_status=None,
-        new_status="OPEN",
-        changed_by=None,
-        note="Ticket created for confirmed fault."
-    )
-
-    create_ticket_notifications(
-        ticket=ticket,
-        fault=fault
-    )
-
-    return ticket
-
-
-def create_or_reopen_fault_ticket(
-    fault_id,
-    recurrence,
-    priority=None
-):
-    """
-    Create a new ticket for a new fault.
-
-    If the fault is a post-repair recurrence, reopen the
-    existing RESOLVED ticket instead of creating a new one.
-    """
-
-    fault = get_fault(fault_id)
-
-    if (
-        recurrence is not None
-        and recurrence.get("classification")
-        == "POST_REPAIR_RECURRENCE"
-    ):
-        previous_ticket = recurrence.get(
-            "previous_ticket"
+    with transaction():
+        ticket = create_ticket(
+            fault_id=fault_id,
+            priority=priority,
+            status="OPEN"
         )
 
-        if previous_ticket is None:
-            raise ValueError(
-                "Post-repair recurrence detected but "
-                "the previous resolved ticket was not found."
-            )
+        create_ticket_history(
+            ticket_id=ticket[0],
+            previous_status=None,
+            new_status="OPEN",
+            changed_by=None,
+            note="Ticket created for confirmed fault."
+        )
 
-        return reopen_existing_ticket_for_recurrence(
-            ticket=previous_ticket,
+        create_ticket_notifications(
+            ticket=ticket,
             fault=fault
         )
 
-    return create_fault_ticket(
-        fault_id=fault_id,
-        priority=priority
-    )
+    return ticket
 
 
 def change_ticket_status(
@@ -499,38 +468,34 @@ def change_ticket_status(
             f"{current_status} -> {new_status}."
         )
 
-    updated_ticket = update_ticket_status(
-        ticket_id=ticket_id,
-        status=new_status,
-        maintenance_notes=maintenance_notes
-    )
-
-    create_ticket_history(
-        ticket_id=ticket_id,
-        previous_status=current_status,
-        new_status=new_status,
-        changed_by=changed_by,
-        note=note
-    )
-
-    fault_id = updated_ticket[1]
-
-    if new_status == "REOPENED":
-        update_fault_status(
-            fault_id=fault_id,
-            status="REOPENED"
+    with transaction():
+        updated_ticket = update_ticket_status(
+            ticket_id=ticket_id,
+            status=new_status,
+            maintenance_notes=maintenance_notes
         )
 
-    elif new_status == "RESOLVED":
-        update_fault_status(
-            fault_id=fault_id,
-            status="RESOLVED"
+        create_ticket_history(
+            ticket_id=ticket_id,
+            previous_status=current_status,
+            new_status=new_status,
+            changed_by=changed_by,
+            note=note
         )
 
-    elif new_status == "CLOSED":
-        update_fault_status(
-            fault_id=fault_id,
-            status="CLOSED"
+        # Ticket and fault statuses share the same names.
+        fault = update_fault_status(
+            fault_id=updated_ticket[1],
+            status=new_status
+        )
+
+    if new_status == "RESOLVED" and fault is not None:
+        # Readings taken before the repair must not count
+        # towards a post-repair recurrence.
+        clear_window(
+            room_id=fault[1],
+            fault_type=fault[3],
+            device_id=fault[2]
         )
 
     return updated_ticket

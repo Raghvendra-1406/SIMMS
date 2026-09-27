@@ -1,3 +1,5 @@
+import threading
+
 from collections import deque
 
 WINDOW_SIZE = 5
@@ -6,6 +8,11 @@ RECOVERY_THRESHOLD = 3
 
 
 _windows = {}
+
+# Windows are shared by the MQTT subscriber thread and API
+# request threads (verification, ticket resolution).
+# RLock because the public helpers call get_or_create_window.
+_windows_lock = threading.RLock()
 
 
 def get_window_key(
@@ -31,12 +38,13 @@ def get_or_create_window(
         device_id=device_id
     )
 
-    if key not in _windows:
-        _windows[key] = deque(
-            maxlen=WINDOW_SIZE
-        )
+    with _windows_lock:
+        if key not in _windows:
+            _windows[key] = deque(
+                maxlen=WINDOW_SIZE
+            )
 
-    return _windows[key]
+        return _windows[key]
 
 
 def add_observation(
@@ -45,25 +53,26 @@ def add_observation(
     is_abnormal,
     device_id=None
 ):
-    window = get_or_create_window(
-        room_id=room_id,
-        fault_type=fault_type,
-        device_id=device_id
-    )
-
-    window.append(bool(is_abnormal))
-
-    abnormal_count = sum(window)
-
-    return {
-        "window": list(window),
-        "window_size": len(window),
-        "abnormal_count": abnormal_count,
-        "confirmed": (
-            len(window) == WINDOW_SIZE
-            and abnormal_count >= CONFIRMATION_THRESHOLD
+    with _windows_lock:
+        window = get_or_create_window(
+            room_id=room_id,
+            fault_type=fault_type,
+            device_id=device_id
         )
-    }
+
+        window.append(bool(is_abnormal))
+
+        abnormal_count = sum(window)
+
+        return {
+            "window": list(window),
+            "window_size": len(window),
+            "abnormal_count": abnormal_count,
+            "confirmed": (
+                len(window) == WINDOW_SIZE
+                and abnormal_count >= CONFIRMATION_THRESHOLD
+            )
+        }
 
 
 def is_confirmed(
@@ -71,18 +80,19 @@ def is_confirmed(
     fault_type,
     device_id=None
 ):
-    window = get_or_create_window(
-        room_id=room_id,
-        fault_type=fault_type,
-        device_id=device_id
-    )
+    with _windows_lock:
+        window = get_or_create_window(
+            room_id=room_id,
+            fault_type=fault_type,
+            device_id=device_id
+        )
 
-    abnormal_count = sum(window)
+        abnormal_count = sum(window)
 
-    return (
-        len(window) == WINDOW_SIZE
-        and abnormal_count >= CONFIRMATION_THRESHOLD
-    )
+        return (
+            len(window) == WINDOW_SIZE
+            and abnormal_count >= CONFIRMATION_THRESHOLD
+        )
 
 
 def get_abnormal_count(
@@ -90,13 +100,14 @@ def get_abnormal_count(
     fault_type,
     device_id=None
 ):
-    window = get_or_create_window(
-        room_id=room_id,
-        fault_type=fault_type,
-        device_id=device_id
-    )
+    with _windows_lock:
+        window = get_or_create_window(
+            room_id=room_id,
+            fault_type=fault_type,
+            device_id=device_id
+        )
 
-    return sum(window)
+        return sum(window)
 
 
 def get_recent_window(
@@ -104,13 +115,14 @@ def get_recent_window(
     fault_type,
     device_id=None
 ):
-    window = get_or_create_window(
-        room_id=room_id,
-        fault_type=fault_type,
-        device_id=device_id
-    )
+    with _windows_lock:
+        window = get_or_create_window(
+            room_id=room_id,
+            fault_type=fault_type,
+            device_id=device_id
+        )
 
-    return list(window)
+        return list(window)
 
 
 def is_recovered(
@@ -118,18 +130,19 @@ def is_recovered(
     fault_type,
     device_id=None
 ):
-    window = get_or_create_window(
-        room_id=room_id,
-        fault_type=fault_type,
-        device_id=device_id
-    )
+    with _windows_lock:
+        window = get_or_create_window(
+            room_id=room_id,
+            fault_type=fault_type,
+            device_id=device_id
+        )
 
-    normal_count = len(window) - sum(window)
+        normal_count = len(window) - sum(window)
 
-    return (
-        len(window) == WINDOW_SIZE
-        and normal_count >= RECOVERY_THRESHOLD
-    )
+        return (
+            len(window) == WINDOW_SIZE
+            and normal_count >= RECOVERY_THRESHOLD
+        )
 
 
 def clear_window(
@@ -143,4 +156,5 @@ def clear_window(
         device_id=device_id
     )
 
-    _windows.pop(key, None)
+    with _windows_lock:
+        _windows.pop(key, None)
