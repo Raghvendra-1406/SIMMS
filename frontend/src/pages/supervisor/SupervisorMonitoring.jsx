@@ -559,6 +559,11 @@ export default function SupervisorMonitoring() {
 
   const connectionOk = !error && !loading;
 
+  // Load failed and nothing to show: KPI cards display "—" instead of misleading zeros.
+
+  const loadFailed = Boolean(error) && classrooms.length === 0;
+
+
   return (
     <AppShell
       eyebrow="Overview"
@@ -666,6 +671,7 @@ export default function SupervisorMonitoring() {
       {/* KPIs */}
       <section aria-label="Key metrics" className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <StatCard
+          unavailable={loadFailed}
           label="Classrooms"
           value={
             selectedRoomId === "ALL"
@@ -678,6 +684,7 @@ export default function SupervisorMonitoring() {
           loading={loading}
         />
         <StatCard
+          unavailable={loadFailed}
           label="Occupancy"
           value={totalPeople}
           hint="Detected people"
@@ -686,6 +693,7 @@ export default function SupervisorMonitoring() {
           loading={loading}
         />
         <StatCard
+          unavailable={loadFailed}
           label="Avg. temperature"
           value={
             averageTemperature !== null ? (
@@ -707,6 +715,7 @@ export default function SupervisorMonitoring() {
           loading={loading}
         />
         <StatCard
+          unavailable={loadFailed}
           label="Active faults"
           value={filteredFaults.length}
           hint={
@@ -915,7 +924,7 @@ export default function SupervisorMonitoring() {
           filteredFaults.length > 0 ? (
             <StatusBadge tone="danger" label={`${filteredFaults.length} active`} />
           ) : (
-            <StatusBadge tone="success" label="All clear" />
+            loadFailed ? null : <StatusBadge tone="success" label="All clear" />
           )
         }
       >
@@ -923,9 +932,9 @@ export default function SupervisorMonitoring() {
           <SkeletonRows rows={2} />
         ) : filteredFaults.length === 0 ? (
           <EmptyState
-            icon="checkCircle"
-            title="No active faults"
-            description="No confirmed active faults are currently in the selected monitoring scope."
+            icon={loadFailed ? "wifiOff" : "checkCircle"}
+            title={loadFailed ? "Faults unavailable" : "No active faults"}
+            description={loadFailed ? "Fault data could not be loaded. Retry once the backend is reachable." : "No confirmed active faults are currently in the selected monitoring scope."}
           />
         ) : (
           <ul className="divide-y divide-slate-100">

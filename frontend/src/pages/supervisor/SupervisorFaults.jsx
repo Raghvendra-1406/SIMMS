@@ -13,6 +13,7 @@ import {
   StatCard,
 } from "../../components/ui";
 import { navigateTo } from "../../lib/session";
+import { formatConfidence } from "../../lib/format";
 
 const API_BASE_URL = "http://localhost:8000";
 
@@ -72,23 +73,6 @@ function getFaultTypeMeta(faultType) {
       tone: "neutral",
     }
   );
-}
-
-function getConfidenceLabel(confidence) {
-  if (
-    confidence === null ||
-    confidence === undefined
-  ) {
-    return "—";
-  }
-
-  const value = Number(confidence);
-
-  if (Number.isNaN(value)) {
-    return confidence;
-  }
-
-  return `${(value).toFixed(1)}%`;
 }
 
 export default function SupervisorFaults() {
@@ -292,6 +276,11 @@ export default function SupervisorFaults() {
   const openFault = (faultId) =>
     navigateTo(`/supervisor/faults/${faultId}`);
 
+  // Load failed and nothing to show: KPI cards display "—" instead of misleading zeros.
+
+  const loadFailed = Boolean(error) && faults.length === 0;
+
+
   return (
     <AppShell
       eyebrow="Operations"
@@ -307,6 +296,7 @@ export default function SupervisorFaults() {
       {/* KPIs */}
       <section aria-label="Fault summary" className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <StatCard
+          unavailable={loadFailed}
           label="Active faults"
           value={faults.length}
           hint="All confirmed active faults"
@@ -316,6 +306,7 @@ export default function SupervisorFaults() {
           onClick={() => setFaultTypeFilter("ALL")}
         />
         <StatCard
+          unavailable={loadFailed}
           label="Fan failures"
           value={fanFailures}
           hint="Confirmed fan failures"
@@ -325,6 +316,7 @@ export default function SupervisorFaults() {
           onClick={() => setFaultTypeFilter("FAN_FAILURE")}
         />
         <StatCard
+          unavailable={loadFailed}
           label="Lights left on"
           value={lightsLeftOn}
           hint="Confirmed lighting wastage"
@@ -334,6 +326,7 @@ export default function SupervisorFaults() {
           onClick={() => setFaultTypeFilter("LIGHTS_LEFT_ON")}
         />
         <StatCard
+          unavailable={loadFailed}
           label="Electrical"
           value={electricalFaults}
           hint="Electrical abnormalities"
@@ -386,9 +379,9 @@ export default function SupervisorFaults() {
         ) : filteredFaults.length === 0 ? (
           faults.length === 0 ? (
             <EmptyState
-              icon="checkCircle"
-              title="No active faults"
-              description="There are currently no confirmed active faults."
+              icon={loadFailed ? "wifiOff" : "checkCircle"}
+              title={loadFailed ? "Faults unavailable" : "No active faults"}
+              description={loadFailed ? "Fault data could not be loaded. Retry once the backend is reachable." : "There are currently no confirmed active faults."}
             />
           ) : (
             <EmptyState
@@ -469,7 +462,7 @@ export default function SupervisorFaults() {
                         </td>
                         <td className="text-right">
                           <p className="num font-semibold text-slate-900">
-                            {getConfidenceLabel(fault.confidence)}
+                            {formatConfidence(fault.confidence)}
                           </p>
                           {fault.abnormal_count !== null &&
                             fault.abnormal_count !== undefined && (
@@ -514,7 +507,7 @@ export default function SupervisorFaults() {
                             {getFaultTypeLabel(fault.fault_type)}
                           </p>
                           <span className="num shrink-0 text-xs font-semibold text-slate-700">
-                            {getConfidenceLabel(fault.confidence)}
+                            {formatConfidence(fault.confidence)}
                           </span>
                         </div>
                         <p className="mt-0.5 truncate text-xs font-medium text-slate-700">

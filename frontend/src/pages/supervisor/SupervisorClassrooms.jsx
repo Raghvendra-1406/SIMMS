@@ -14,6 +14,7 @@ import {
   StatusBadge,
 } from "../../components/ui";
 import { navigateTo } from "../../lib/session";
+import { isHealthyStatus } from "../../lib/format";
 
 const API_BASE_URL = "http://localhost:8000";
 
@@ -164,7 +165,9 @@ export default function SupervisorClassrooms() {
           ? true
           : healthFilter === "NO_DATA"
             ? !classroom.health
-            : healthStatus === healthFilter;
+            : healthFilter === "HEALTHY"
+              ? isHealthyStatus(healthStatus)
+              : healthStatus === healthFilter;
 
       return matchesSearch && matchesStatus && matchesHealth;
     });
@@ -182,7 +185,7 @@ export default function SupervisorClassrooms() {
     ).length;
 
     const normal = classroomRows.filter(
-      (classroom) => String(classroom.health?.health_status || "").toUpperCase() === "NORMAL"
+      (classroom) => isHealthyStatus(classroom.health?.health_status)
     ).length;
 
     const warning = classroomRows.filter(
@@ -216,13 +219,18 @@ export default function SupervisorClassrooms() {
 
   const healthOptions = [
     { value: "ALL", label: "All health" },
-    { value: "NORMAL", label: "Normal", count: loading ? undefined : statistics.normal },
+    { value: "HEALTHY", label: "Healthy", count: loading ? undefined : statistics.normal },
     { value: "WARNING", label: "Warning", count: loading ? undefined : statistics.warning },
     { value: "CRITICAL", label: "Critical", count: loading ? undefined : statistics.critical },
     { value: "NO_DATA", label: "No data", count: loading ? undefined : statistics.noHealthData },
   ];
 
   const openClassroom = (roomId) => navigateTo(`/supervisor/classrooms/${roomId}`);
+
+  // Load failed and nothing to show: KPI cards display "—" instead of misleading zeros.
+
+  const loadFailed = Boolean(error) && classrooms.length === 0;
+
 
   return (
     <AppShell
@@ -239,6 +247,7 @@ export default function SupervisorClassrooms() {
       {/* KPIs */}
       <section aria-label="Classroom summary" className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <StatCard
+          unavailable={loadFailed}
           label="Classrooms"
           value={statistics.total}
           hint="Configured classrooms"
@@ -247,6 +256,7 @@ export default function SupervisorClassrooms() {
           loading={loading}
         />
         <StatCard
+          unavailable={loadFailed}
           label="Active"
           value={statistics.active}
           hint={`${statistics.inactive} inactive`}
@@ -255,7 +265,8 @@ export default function SupervisorClassrooms() {
           loading={loading}
         />
         <StatCard
-          label="Normal health"
+          unavailable={loadFailed}
+          label="Healthy"
           value={statistics.normal}
           hint={`${statistics.warning} warning · ${statistics.critical} critical · ${statistics.noHealthData} no data`}
           icon="heart"
@@ -263,6 +274,7 @@ export default function SupervisorClassrooms() {
           loading={loading}
         />
         <StatCard
+          unavailable={loadFailed}
           label="Active faults"
           value={faults.length}
           hint={faults.length > 0 ? "Confirmed active faults" : "No confirmed faults"}

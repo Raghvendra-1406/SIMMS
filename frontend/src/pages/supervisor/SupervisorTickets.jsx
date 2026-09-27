@@ -375,6 +375,11 @@ export default function SupervisorTickets() {
     );
   }
 
+  // Load failed and nothing to show: KPI cards display "—" instead of misleading zeros.
+
+  const loadFailed = Boolean(error) && tickets.length === 0;
+
+
   return (
     <AppShell
       eyebrow="Operations"
@@ -395,6 +400,7 @@ export default function SupervisorTickets() {
       {/* KPIs */}
       <section aria-label="Ticket summary" className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <StatCard
+          unavailable={loadFailed}
           label="Open"
           value={openCount}
           hint="Awaiting maintenance action"
@@ -404,6 +410,7 @@ export default function SupervisorTickets() {
           onClick={() => setStatusFilter("OPEN")}
         />
         <StatCard
+          unavailable={loadFailed}
           label="In progress"
           value={inProgressCount}
           hint="Currently being worked on"
@@ -413,6 +420,7 @@ export default function SupervisorTickets() {
           onClick={() => setStatusFilter("IN_PROGRESS")}
         />
         <StatCard
+          unavailable={loadFailed}
           label="Resolved"
           value={resolvedCount}
           hint="Marked as resolved"
@@ -422,6 +430,7 @@ export default function SupervisorTickets() {
           onClick={() => setStatusFilter("RESOLVED")}
         />
         <StatCard
+          unavailable={loadFailed}
           label="Reopened"
           value={reopenedCount}
           hint="Requiring renewed attention"

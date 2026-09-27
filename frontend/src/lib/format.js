@@ -49,3 +49,18 @@ export function formatLabel(value) {
 export function statusTone(status) {
   return STATUS_TONE[String(status ?? "").toUpperCase()] || "neutral";
 }
+
+/** Fault confidence is stored by the backend as a percentage (0–100). */
+export function formatConfidence(confidence) {
+  if (confidence === null || confidence === undefined || confidence === "") return "—";
+  const value = Number(confidence);
+  if (Number.isNaN(value)) return String(confidence);
+  return `${Number.isInteger(value) ? value : value.toFixed(1)}%`;
+}
+
+/** Backend health statuses that count as "healthy" (NORMAL kept for older records). */
+export const HEALTHY_STATUSES = ["EXCELLENT", "GOOD", "NORMAL"];
+
+export function isHealthyStatus(status) {
+  return HEALTHY_STATUSES.includes(String(status ?? "").toUpperCase());
+}

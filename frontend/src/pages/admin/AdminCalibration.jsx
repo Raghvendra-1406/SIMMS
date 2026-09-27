@@ -951,46 +951,61 @@ export default function AdminCalibration() {
       setSuccess("");
 
       /*
-       * IMPORTANT:
-       *
-       * Your current backend accepts image_path
-       * as a string, not multipart upload.
-       *
-       * Therefore this frontend sends the selected
-       * image filename/path for now.
-       *
-       * The image itself is shown locally in the
-       * browser while calibration is being created.
+       * A newly selected image is uploaded first; the backend
+       * stores it and returns the path used by the calibration.
+       * Re-saving without a new image reuses the saved path.
        */
+      let imagePath = savedImagePath;
 
-      const imagePath =
-        savedImagePath ||
-        imageFile?.name ||
-        "uploaded-classroom-image";
+      if (imageFile) {
+        const formData = new FormData();
+        formData.append("file", imageFile);
+
+        const uploadResponse =
+          await fetch(
+            `${API_BASE_URL}/vision/calibration/image`,
+            {
+              method: "POST",
+              headers: getAuthHeaders(),
+              body: formData,
+            }
+          );
+
+        const uploadResult =
+          await uploadResponse.json();
+
+        if (!uploadResponse.ok) {
+          throw new Error(
+            uploadResult.detail ||
+              "Unable to upload the classroom image."
+          );
+        }
+
+        imagePath = uploadResult.image_path;
+      }
+
+      const params = new URLSearchParams({
+        room_id: String(Number(selectedRoomId)),
+        image_path: imagePath,
+      });
 
       const payload = {
-        room_id:
-          Number(selectedRoomId),
-
-        image_path:
-          imagePath,
-
         fans: fanBoxes.map(
           (box) => ({
             device_id:
               Number(box.device_id),
 
-            x1: Number(box.x1),
-            y1: Number(box.y1),
-            x2: Number(box.x2),
-            y2: Number(box.y2),
+            x1: Math.round(Number(box.x1)),
+            y1: Math.round(Number(box.y1)),
+            x2: Math.round(Number(box.x2)),
+            y2: Math.round(Number(box.y2)),
           })
         ),
       };
 
       const response =
         await fetch(
-          `${API_BASE_URL}/vision/calibration`,
+          `${API_BASE_URL}/vision/calibration?${params}`,
           {
             method: "POST",
 

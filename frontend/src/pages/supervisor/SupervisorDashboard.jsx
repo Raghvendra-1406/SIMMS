@@ -11,7 +11,7 @@ import {
   StatCard,
   StatusBadge,
 } from "../../components/ui";
-import { formatLabel } from "../../lib/format";
+import { formatLabel, formatConfidence, isHealthyStatus } from "../../lib/format";
 import { navigateTo } from "../../lib/session";
 
 const API_BASE_URL = "http://localhost:8000";
@@ -181,7 +181,7 @@ function SupervisorDashboard() {
     healthData.forEach((health) => {
       const status = String(health.health_status || "").toUpperCase();
 
-      if (status === "NORMAL") {
+      if (isHealthyStatus(status)) {
         normal += 1;
       } else if (status === "WARNING") {
         warning += 1;
@@ -213,6 +213,11 @@ function SupervisorDashboard() {
 
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+
+  // Load failed and nothing to show: KPI cards display "—" instead of misleading zeros.
+
+  const loadFailed = Boolean(error) && classrooms.length === 0;
+
 
   return (
     <AppShell
@@ -252,6 +257,7 @@ function SupervisorDashboard() {
       {/* KPIs */}
       <section aria-label="Key metrics" className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3 xl:grid-cols-5">
         <StatCard
+          unavailable={loadFailed}
           label="Classrooms"
           value={classrooms.length}
           hint="Monitored rooms"
@@ -261,14 +267,16 @@ function SupervisorDashboard() {
           onClick={() => navigateTo("/supervisor/classrooms")}
         />
         <StatCard
-          label="Normal"
+          unavailable={loadFailed}
+          label="Healthy"
           value={healthSummary.normal}
-          hint="Healthy classrooms"
+          hint="Excellent or good health"
           icon="checkCircle"
           tone="success"
           loading={loading}
         />
         <StatCard
+          unavailable={loadFailed}
           label="Warning"
           value={healthSummary.warning}
           hint="Needs a closer look"
@@ -277,6 +285,7 @@ function SupervisorDashboard() {
           loading={loading}
         />
         <StatCard
+          unavailable={loadFailed}
           label="Critical"
           value={healthSummary.critical}
           hint="Immediate attention"
@@ -285,6 +294,7 @@ function SupervisorDashboard() {
           loading={loading}
         />
         <StatCard
+          unavailable={loadFailed}
           label="Open tickets"
           value={tickets.length}
           hint={tickets.length > 0 ? "Awaiting maintenance" : "Queue is clear"}
@@ -387,9 +397,9 @@ function SupervisorDashboard() {
             <TableSkeleton rows={3} />
           ) : faults.length === 0 ? (
             <EmptyState
-              icon="checkCircle"
-              title="No active faults"
-              description="No confirmed fault is currently requiring attention."
+              icon={loadFailed ? "wifiOff" : "checkCircle"}
+              title={loadFailed ? "Faults unavailable" : "No active faults"}
+              description={loadFailed ? "Fault data could not be loaded. Retry once the backend is reachable." : "No confirmed fault is currently requiring attention."}
             />
           ) : (
             <ul className="divide-y divide-slate-100">
@@ -427,7 +437,7 @@ function SupervisorDashboard() {
                           <span className="num">{formatDate(fault.detected_at)}</span>
                         </span>
                         <span className="num font-medium text-slate-700">
-                          {formatNumber(Number(fault.confidence || 0) * 100)}% conf.
+                          {formatConfidence(fault.confidence)} conf.
                         </span>
                       </div>
                     </div>

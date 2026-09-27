@@ -11,7 +11,7 @@ import {
   StatCard,
   StatusBadge,
 } from "../../components/ui";
-import { formatLabel } from "../../lib/format";
+import { formatLabel, formatConfidence } from "../../lib/format";
 import { navigateTo } from "../../lib/session";
 
 const API_BASE_URL = "http://localhost:8000";
@@ -287,6 +287,11 @@ export default function AdminDashboard() {
     { label: "Active users", hint: "Accounts with access", value: activeUsers.length, total: users.length, icon: "users", tone: "violet" },
   ];
 
+  // Load failed and nothing to show: KPI cards display "—" instead of misleading zeros.
+
+  const loadFailed = Boolean(error) && classrooms.length === 0;
+
+
   return (
     <AppShell
       eyebrow="Administration"
@@ -329,6 +334,7 @@ export default function AdminDashboard() {
           {/* KPIs */}
           <section aria-label="Key metrics" className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
             <StatCard
+              unavailable={loadFailed}
               label="Classrooms"
               value={classrooms.length}
               hint={`${activeClassrooms.length} active`}
@@ -337,6 +343,7 @@ export default function AdminDashboard() {
               onClick={() => navigateTo("/admin/rooms")}
             />
             <StatCard
+              unavailable={loadFailed}
               label="Devices"
               value={devices.length}
               hint={`${activeDevices.length} active`}
@@ -345,6 +352,7 @@ export default function AdminDashboard() {
               onClick={() => navigateTo("/admin/devices")}
             />
             <StatCard
+              unavailable={loadFailed}
               label="Active faults"
               value={faults.length}
               hint={faults.length > 0 ? "Confirmed and awaiting resolution" : "No confirmed faults"}
@@ -352,6 +360,7 @@ export default function AdminDashboard() {
               tone={faults.length > 0 ? "danger" : "success"}
             />
             <StatCard
+              unavailable={loadFailed}
               label="Open tickets"
               value={openTickets.length}
               hint={openTickets.length > 0 ? "Maintenance attention required" : "Queue is clear"}
@@ -503,12 +512,12 @@ export default function AdminDashboard() {
               faults.length > 0 ? (
                 <StatusBadge tone="danger" label={`${faults.length} active`} />
               ) : (
-                <StatusBadge tone="success" label="All clear" />
+                loadFailed ? null : <StatusBadge tone="success" label="All clear" />
               )
             }
           >
             {faults.length === 0 ? (
-              <EmptyState icon="checkCircle" title="No active faults" description="The monitoring system reports no confirmed faults right now." />
+              <EmptyState icon={loadFailed ? "wifiOff" : "checkCircle"} title={loadFailed ? "Faults unavailable" : "No active faults"} description={loadFailed ? "Fault data could not be loaded. Retry once the backend is reachable." : "The monitoring system reports no confirmed faults right now."} />
             ) : (
               <ul className="grid divide-y divide-slate-100 lg:grid-cols-2 lg:divide-y-0">
                 {faults.slice(0, 6).map((fault, index) => (
@@ -533,7 +542,7 @@ export default function AdminDashboard() {
                           {formatDate(fault.detected_at)}
                         </span>
                         <span className="num font-medium text-slate-700">
-                          {fault.confidence != null ? `${(fault.confidence * 100).toFixed(1)}% conf.` : "Conf. —"}
+                          {fault.confidence != null ? `${formatConfidence(fault.confidence)} conf.` : "Conf. —"}
                         </span>
                       </div>
                     </div>

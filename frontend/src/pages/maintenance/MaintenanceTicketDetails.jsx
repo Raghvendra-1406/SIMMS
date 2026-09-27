@@ -11,6 +11,7 @@ import {
   StatusBadge,
 } from "../../components/ui";
 import { navigateTo } from "../../lib/session";
+import { formatConfidence } from "../../lib/format";
 
 const API_BASE_URL = "http://localhost:8000";
 
@@ -527,10 +528,7 @@ export default function MaintenanceTicketDetails() {
                     : "Room-level fault"}
                 </DetailItem>
                 <DetailItem label="Confidence" mono>
-                  {fault.confidence !== null &&
-                  fault.confidence !== undefined
-                    ? `${Number(fault.confidence).toFixed(0)}%`
-                    : "—"}
+                  {formatConfidence(fault.confidence)}
                 </DetailItem>
                 <DetailItem label="Abnormal observations" mono>
                   {fault.abnormal_count !== null &&

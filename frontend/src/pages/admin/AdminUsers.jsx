@@ -325,6 +325,11 @@ export default function AdminUsers() {
     { value: "INACTIVE", label: "Inactive", count: inactiveUsers },
   ];
 
+  // Load failed and nothing to show: KPI cards display "—" instead of misleading zeros.
+
+  const loadFailed = Boolean(error) && users.length === 0;
+
+
   return (
     <AppShell
       eyebrow="Access"
@@ -355,6 +360,7 @@ export default function AdminUsers() {
       {/* KPIs */}
       <section aria-label="User metrics" className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <StatCard
+          unavailable={loadFailed}
           label="Total users"
           value={users.length}
           hint="Registered accounts"
@@ -363,6 +369,7 @@ export default function AdminUsers() {
           loading={loading}
         />
         <StatCard
+          unavailable={loadFailed}
           label="Active"
           value={activeUsers}
           hint="Accounts with access"
@@ -371,6 +378,7 @@ export default function AdminUsers() {
           loading={loading}
         />
         <StatCard
+          unavailable={loadFailed}
           label="Inactive"
           value={inactiveUsers}
           hint="Access currently revoked"
@@ -379,6 +387,7 @@ export default function AdminUsers() {
           loading={loading}
         />
         <StatCard
+          unavailable={loadFailed}
           label="Administrators"
           value={adminUsers}
           hint="Accounts with full control"

@@ -286,6 +286,11 @@ function MaintenanceDashboard() {
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
 
+  // Load failed and nothing to show: KPI cards display "—" instead of misleading zeros.
+
+  const loadFailed = Boolean(error) && tickets.length === 0;
+
+
   return (
     <AppShell
       eyebrow="Maintenance"
@@ -322,6 +327,7 @@ function MaintenanceDashboard() {
       {/* KPIs */}
       <section aria-label="Key metrics" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <StatCard
+          unavailable={loadFailed}
           label="Open tickets"
           value={ticketSummary.open}
           loading={loading}
@@ -331,6 +337,7 @@ function MaintenanceDashboard() {
           onClick={() => navigateTo("/maintenance/tickets")}
         />
         <StatCard
+          unavailable={loadFailed}
           label="High priority"
           value={ticketSummary.highPriority}
           loading={loading}
@@ -339,6 +346,7 @@ function MaintenanceDashboard() {
           tone={ticketSummary.highPriority > 0 ? "warning" : "success"}
         />
         <StatCard
+          unavailable={loadFailed}
           label="Active faults"
           value={faults.length}
           loading={loading}
@@ -460,7 +468,7 @@ function MaintenanceDashboard() {
             (faults.length > 0 ? (
               <StatusBadge tone="danger" label={`${faults.length} active`} />
             ) : (
-              <StatusBadge tone="success" label="All clear" />
+              loadFailed ? null : <StatusBadge tone="success" label="All clear" />
             ))
           }
         >
@@ -468,68 +476,86 @@ function MaintenanceDashboard() {
             <QueueSkeleton rows={3} />
           ) : faults.length === 0 ? (
             <EmptyState
-              icon="checkCircle"
-              title="No active faults"
-              description="No confirmed infrastructure fault is currently active."
+              icon={loadFailed ? "wifiOff" : "checkCircle"}
+              title={loadFailed ? "Faults unavailable" : "No active faults"}
+              description={loadFailed ? "Fault data could not be loaded. Retry once the backend is reachable." : "No confirmed infrastructure fault is currently active."}
             />
           ) : (
             <ul className="divide-y divide-slate-100">
-              {faults.slice(0, 5).map((fault) => (
-                <li key={fault.fault_id}>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      navigateTo(
-                        `/maintenance/tickets/${
-                          tickets.find(
-                            (ticket) =>
-                              ticket.fault_id ===
-                              fault.fault_id
-                          )?.ticket_id || ""
-                        }`
-                      )
-                    }
-                    className="group flex w-full items-start gap-3 px-5 py-3.5 text-left transition-colors duration-150 hover:bg-slate-50 focus-visible:bg-slate-50"
-                  >
-                    <IconTile icon="alert" tone="danger" />
+              {faults.slice(0, 5).map((fault) => {
+                const relatedTicket = tickets.find(
+                  (ticket) => ticket.fault_id === fault.fault_id
+                );
 
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-start justify-between gap-3">
-                        <p className="truncate text-sm font-semibold text-slate-900">
-                          {formatFaultType(fault.fault_type)}
+                const rowContent = (
+                  <>
+                      <IconTile icon="alert" tone="danger" />
+
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-start justify-between gap-3">
+                          <p className="truncate text-sm font-semibold text-slate-900">
+                            {formatFaultType(fault.fault_type)}
+                          </p>
+                          <StatusBadge status={fault.status || "ACTIVE"} size="sm" />
+                        </div>
+
+                        <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-xs text-slate-500">
+                          <span className="font-medium text-slate-700">
+                            {getClassroomName(fault.room_id)}
+                          </span>
+                          {fault.device_id !== null &&
+                            fault.device_id !== undefined && (
+                              <>
+                                <span aria-hidden="true">·</span>
+                                <span className="num">Device #{fault.device_id}</span>
+                              </>
+                            )}
                         </p>
-                        <StatusBadge status={fault.status || "ACTIVE"} size="sm" />
-                      </div>
 
-                      <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-xs text-slate-500">
-                        <span className="font-medium text-slate-700">
-                          {getClassroomName(fault.room_id)}
-                        </span>
-                        {fault.device_id !== null &&
-                          fault.device_id !== undefined && (
-                            <>
-                              <span aria-hidden="true">·</span>
-                              <span className="num">Device #{fault.device_id}</span>
-                            </>
-                          )}
-                      </p>
+                        <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-500">
+                          <span className="num">
+                            {fault.abnormal_count ?? "—"} abnormal obs.
+                          </span>
+                          <span className="num flex items-center gap-1">
+                            <Icon name="clock" className="h-3 w-3" />
+                            {formatDate(
+                              fault.confirmed_at ||
+                                fault.detected_at
+                            )}
+                          </span>
+                        </div>
 
-                      <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-500">
-                        <span className="num">
-                          {fault.abnormal_count ?? "—"} abnormal obs.
-                        </span>
-                        <span className="num flex items-center gap-1">
-                          <Icon name="clock" className="h-3 w-3" />
-                          {formatDate(
-                            fault.confirmed_at ||
-                              fault.detected_at
-                          )}
-                        </span>
+                        {!relatedTicket && (
+                          <p className="mt-2 text-[11px] font-medium text-slate-500">
+                            No ticket assigned to you for this fault yet.
+                          </p>
+                        )}
                       </div>
-                    </div>
-                  </button>
-                </li>
-              ))}
+                  </>
+                );
+
+                return (
+                  <li key={fault.fault_id}>
+                    {relatedTicket ? (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          navigateTo(
+                            `/maintenance/tickets/${relatedTicket.ticket_id}`
+                          )
+                        }
+                        className="group flex w-full items-start gap-3 px-5 py-3.5 text-left transition-colors duration-150 hover:bg-slate-50 focus-visible:bg-slate-50"
+                      >
+                        {rowContent}
+                      </button>
+                    ) : (
+                      <div className="flex w-full items-start gap-3 px-5 py-3.5 text-left">
+                        {rowContent}
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           )}
         </Card>

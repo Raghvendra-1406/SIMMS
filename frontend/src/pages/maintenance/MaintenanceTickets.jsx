@@ -305,6 +305,11 @@ function MaintenanceTickets() {
         { value: "LOW", label: "Low" },
     ];
 
+    // Load failed and nothing to show: KPI cards display "—" instead of misleading zeros.
+
+    const loadFailed = Boolean(error) && tickets.length === 0;
+
+
     return (
         <AppShell
             eyebrow="Maintenance"
@@ -334,6 +339,7 @@ function MaintenanceTickets() {
                 className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3"
             >
                 <StatCard
+                    unavailable={loadFailed}
                     label="Open tickets"
                     value={openCount}
                     loading={loading}
@@ -342,6 +348,7 @@ function MaintenanceTickets() {
                     tone={openCount > 0 ? "brand" : "success"}
                 />
                 <StatCard
+                    unavailable={loadFailed}
                     label="Resolved tickets"
                     value={resolvedCount}
                     loading={loading}
@@ -350,6 +357,7 @@ function MaintenanceTickets() {
                     tone="success"
                 />
                 <StatCard
+                    unavailable={loadFailed}
                     label="High priority"
                     value={highPriorityCount}
                     loading={loading}

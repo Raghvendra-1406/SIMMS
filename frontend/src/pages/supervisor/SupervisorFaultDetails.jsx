@@ -10,7 +10,7 @@ import {
   RefreshButton,
   StatusBadge,
 } from "../../components/ui";
-import { formatLabel } from "../../lib/format";
+import { formatLabel, formatConfidence } from "../../lib/format";
 import { navigateTo } from "../../lib/session";
 
 const API_BASE_URL = "http://localhost:8000";
@@ -82,23 +82,6 @@ function getFaultStatusTone(status) {
   if (key === "CLOSED" || key === "FALSE_POSITIVE") return "neutral";
 
   return undefined;
-}
-
-function getConfidenceLabel(confidence) {
-  if (
-    confidence === null ||
-    confidence === undefined
-  ) {
-    return "—";
-  }
-
-  const value = Number(confidence);
-
-  if (Number.isNaN(value)) {
-    return confidence;
-  }
-
-  return `${(value).toFixed(1)}%`;
 }
 
 function DetailsSkeleton() {
@@ -351,7 +334,7 @@ export default function SupervisorFaultDetails() {
                     <div className="rounded-lg border border-slate-200 bg-slate-50/70 px-4 py-3 sm:min-w-[140px]">
                       <p className="text-xs font-medium text-slate-500">Confidence</p>
                       <p className="num mt-0.5 text-2xl font-semibold tracking-tight text-slate-900">
-                        {getConfidenceLabel(fault.confidence)}
+                        {formatConfidence(fault.confidence)}
                       </p>
                     </div>
                     <div className="rounded-lg border border-slate-200 bg-slate-50/70 px-4 py-3 sm:min-w-[140px]">
@@ -377,7 +360,7 @@ export default function SupervisorFaultDetails() {
                         {fault.device_id ? `Device #${fault.device_id}` : "Room-level fault"}
                       </DetailItem>
                       <DetailItem label="Abnormal observations" mono>{fault.abnormal_count ?? "—"}</DetailItem>
-                      <DetailItem label="Confidence" mono>{getConfidenceLabel(fault.confidence)}</DetailItem>
+                      <DetailItem label="Confidence" mono>{formatConfidence(fault.confidence)}</DetailItem>
                       <DetailItem label="Fault ID" mono>{fault.fault_id}</DetailItem>
                     </dl>
                   </Card>

@@ -331,6 +331,11 @@ export default function AdminRooms() {
     }
   };
 
+  // Load failed and nothing to show: KPI cards display "—" instead of misleading zeros.
+
+  const loadFailed = Boolean(error) && classrooms.length === 0;
+
+
   return (
     <AppShell
       eyebrow="Infrastructure"
@@ -365,6 +370,7 @@ export default function AdminRooms() {
       {/* KPIs */}
       <section aria-label="Classroom summary" className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <StatCard
+          unavailable={loadFailed}
           label="Total classrooms"
           value={classrooms.length}
           hint={`${buildingCount} ${buildingCount === 1 ? "building" : "buildings"}`}
@@ -373,6 +379,7 @@ export default function AdminRooms() {
           loading={loading}
         />
         <StatCard
+          unavailable={loadFailed}
           label="Active"
           value={activeCount}
           hint="Operational and monitored"
@@ -381,6 +388,7 @@ export default function AdminRooms() {
           loading={loading}
         />
         <StatCard
+          unavailable={loadFailed}
           label="Inactive"
           value={inactiveCount}
           hint={inactiveCount > 0 ? "Deactivated or offline" : "None deactivated"}
@@ -389,6 +397,7 @@ export default function AdminRooms() {
           loading={loading}
         />
         <StatCard
+          unavailable={loadFailed}
           label="Total capacity"
           value={totalCapacity}
           hint="Seats across all classrooms"

@@ -10,7 +10,7 @@ import {
   RefreshButton,
   StatusBadge,
 } from "../../components/ui";
-import { formatLabel } from "../../lib/format";
+import { formatLabel, formatConfidence } from "../../lib/format";
 import { navigateTo } from "../../lib/session";
 
 const API_BASE_URL = "http://localhost:8000";
@@ -441,10 +441,7 @@ export default function SupervisorTicketDetails() {
                           : "Room-level"}
                       </DetailItem>
                       <DetailItem label="Confidence" mono>
-                        {fault.confidence !== null &&
-                        fault.confidence !== undefined
-                          ? `${Number(fault.confidence).toFixed(1)}%`
-                          : "—"}
+                        {formatConfidence(fault.confidence)}
                       </DetailItem>
                       <DetailItem label="Abnormal count" mono>
                         {fault.abnormal_count ?? "—"}

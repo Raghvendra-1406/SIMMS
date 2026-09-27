@@ -284,6 +284,11 @@ export default function SupervisorClassroomDetails() {
 
   const pageTitle = classroom?.room_name || (roomId ? `Room ${roomId}` : "Classroom");
 
+  // Load failed and nothing to show: KPI cards display "—" instead of misleading zeros.
+
+  const loadFailed = Boolean(error) && !classroom;
+
+
   return (
     <AppShell
       eyebrow="Classrooms"
@@ -354,6 +359,7 @@ export default function SupervisorClassroomDetails() {
           {/* KPIs */}
           <section aria-label="Classroom metrics" className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <StatCard
+              unavailable={loadFailed}
               label="Health score"
               value={health ? getDisplayValue(health.health_score) : "—"}
               hint={health ? formatLabel(healthStatus) : "No health calculation available"}
@@ -370,6 +376,7 @@ export default function SupervisorClassroomDetails() {
               footer={health && health.health_score != null ? <ScoreBar value={health.health_score} /> : null}
             />
             <StatCard
+              unavailable={loadFailed}
               label="Occupancy"
               value={health ? getDisplayValue(health.occupancy_count) : "—"}
               hint="Detected people"
@@ -377,6 +384,7 @@ export default function SupervisorClassroomDetails() {
               tone="violet"
             />
             <StatCard
+              unavailable={loadFailed}
               label="Active faults"
               value={totalFaults}
               hint="Confirmed active faults"
@@ -384,6 +392,7 @@ export default function SupervisorClassroomDetails() {
               tone={Number(totalFaults) > 0 ? "danger" : "success"}
             />
             <StatCard
+              unavailable={loadFailed}
               label="Active devices"
               value={`${activeDevices}/${devices.length}`}
               hint="Configured devices"
@@ -404,15 +413,15 @@ export default function SupervisorClassroomDetails() {
                   faults.length > 0 ? (
                     <StatusBadge tone="danger" label={`${faults.length} active`} />
                   ) : (
-                    <StatusBadge tone="success" label="All clear" />
+                    loadFailed ? null : <StatusBadge tone="success" label="All clear" />
                   )
                 }
               >
                 {faults.length === 0 ? (
                   <EmptyState
-                    icon="checkCircle"
-                    title="No active faults"
-                    description="No confirmed active faults are currently associated with this classroom."
+                    icon={loadFailed ? "wifiOff" : "checkCircle"}
+                    title={loadFailed ? "Faults unavailable" : "No active faults"}
+                    description={loadFailed ? "Fault data could not be loaded. Retry once the backend is reachable." : "No confirmed active faults are currently associated with this classroom."}
                   />
                 ) : (
                   <ul className="divide-y divide-slate-100">

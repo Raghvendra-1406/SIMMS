@@ -92,7 +92,8 @@ const STAT_TONES = {
 };
 
 /** KPI tile. `value` renders in tabular mono figures. */
-export function StatCard({ label, value, hint, icon, tone = "neutral", onClick, loading = false, footer }) {
+/** `unavailable` replaces value + hint when the data behind the card failed to load. */
+export function StatCard({ label, value, hint, icon, tone = "neutral", onClick, loading = false, unavailable = false, footer }) {
   const Tag = onClick ? "button" : "div";
 
   return (
@@ -104,17 +105,23 @@ export function StatCard({ label, value, hint, icon, tone = "neutral", onClick, 
       <div className="flex items-start justify-between gap-3">
         <p className="min-w-0 text-[13px] font-medium leading-snug text-slate-500">{label}</p>
         {icon && (
-          <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg sm:h-8 sm:w-8 ${STAT_TONES[tone] || STAT_TONES.neutral}`}>
+          <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg sm:h-8 sm:w-8 ${STAT_TONES[unavailable ? "neutral" : tone] || STAT_TONES.neutral}`}>
             <Icon name={icon} className="h-4 w-4" />
           </span>
         )}
       </div>
       {loading ? (
         <span className="skeleton mt-2 h-8 w-16" />
+      ) : unavailable ? (
+        <p className="num mt-1 text-2xl font-semibold leading-tight tracking-tight text-slate-300 sm:text-[28px]" aria-label="Unavailable">—</p>
       ) : (
         <p className="num mt-1 truncate text-2xl font-semibold leading-tight tracking-tight text-slate-900 sm:text-[28px]">{value}</p>
       )}
-      {hint && <p className="mt-1 text-xs leading-snug text-slate-500">{hint}</p>}
+      {unavailable ? (
+        <p className="mt-1 text-xs leading-snug text-slate-500">Data unavailable</p>
+      ) : (
+        hint && <p className="mt-1 text-xs leading-snug text-slate-500">{hint}</p>
+      )}
       {footer && <div className="mt-3 border-t border-slate-100 pt-3">{footer}</div>}
     </Tag>
   );

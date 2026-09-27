@@ -339,6 +339,11 @@ export default function AdminDevices() {
     { value: "INACTIVE", label: "Inactive", count: inactiveDevices },
   ];
 
+  // Load failed and nothing to show: KPI cards display "—" instead of misleading zeros.
+
+  const loadFailed = Boolean(error) && devices.length === 0;
+
+
   return (
     <AppShell
       eyebrow="Infrastructure"
@@ -369,6 +374,7 @@ export default function AdminDevices() {
       {/* KPIs */}
       <section aria-label="Device metrics" className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <StatCard
+          unavailable={loadFailed}
           label="Total devices"
           value={devices.length}
           hint="Registered devices"
@@ -377,6 +383,7 @@ export default function AdminDevices() {
           loading={loading}
         />
         <StatCard
+          unavailable={loadFailed}
           label="Active"
           value={activeDevices}
           hint="Currently reporting to SIMMS"
@@ -385,6 +392,7 @@ export default function AdminDevices() {
           loading={loading}
         />
         <StatCard
+          unavailable={loadFailed}
           label="Inactive"
           value={inactiveDevices}
           hint="Deactivated or out of service"
@@ -393,6 +401,7 @@ export default function AdminDevices() {
           loading={loading}
         />
         <StatCard
+          unavailable={loadFailed}
           label="Device types"
           value={deviceTypes.length}
           hint="Distinct hardware types"
