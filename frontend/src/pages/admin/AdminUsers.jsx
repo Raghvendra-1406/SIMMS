@@ -1,4 +1,20 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import AppShell from "../../components/AppShell";
+import Icon from "../../components/Icon";
+import {
+  Alert,
+  Card,
+  EmptyState,
+  Modal,
+  RefreshButton,
+  Segmented,
+  SearchInput,
+  SkeletonRows,
+  Spinner,
+  StatCard,
+  StatusBadge,
+} from "../../components/ui";
+import { formatLabel } from "../../lib/format";
 
 const API_BASE_URL = "http://localhost:8000";
 
@@ -9,10 +25,6 @@ function getAuthHeaders() {
     "Content-Type": "application/json",
     Authorization: `Bearer ${token}`,
   };
-}
-
-function navigateTo(path) {
-  window.location.href = path;
 }
 
 function formatDate(value) {
@@ -27,359 +39,43 @@ function formatDate(value) {
   return date.toLocaleString();
 }
 
-function formatStatus(value) {
-  if (!value) return "—";
+const ROLE_OPTIONS = [
+  { value: "ADMIN", label: "Admin" },
+  { value: "SUPERVISOR", label: "Supervisor" },
+  { value: "MAINTENANCE_STAFF", label: "Maintenance Staff" },
+];
 
-  return String(value).replaceAll("_", " ");
-}
-
-function StatusBadge({ active }) {
-  return (
-    <span
-      className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-bold ${
-        active
-          ? "border-emerald-100 bg-emerald-50 text-emerald-700"
-          : "border-slate-200 bg-slate-100 text-slate-500"
-      }`}
-    >
-      {active ? "ACTIVE" : "INACTIVE"}
-    </span>
-  );
-}
+const ROLE_TONE = {
+  ADMIN: "brand",
+  SUPERVISOR: "violet",
+  MAINTENANCE_STAFF: "info",
+};
 
 function RoleBadge({ role }) {
-  const styles = {
-    ADMIN:
-      "bg-cyan-50 text-cyan-700 border-cyan-100",
-
-    SUPERVISOR:
-      "bg-violet-50 text-violet-700 border-violet-100",
-
-    MAINTENANCE_STAFF:
-      "bg-amber-50 text-amber-700 border-amber-100",
-  };
-
   return (
-    <span
-      className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-bold ${
-        styles[role] ||
-        "bg-slate-100 text-slate-600 border-slate-200"
-      }`}
-    >
-      {formatStatus(role)}
-    </span>
-  );
-}
-
-function NavigationItem({
-  icon,
-  label,
-  path,
-  active,
-  collapsed,
-}) {
-  return (
-    <button
-      type="button"
-      onClick={() => navigateTo(path)}
-      title={collapsed ? label : undefined}
-      className={`group flex w-full items-center rounded-xl text-left text-sm font-semibold transition ${
-        collapsed
-          ? "justify-center px-2 py-2.5"
-          : "gap-3 px-3 py-2.5"
-      } ${
-        active
-          ? "bg-cyan-500 text-white shadow-md shadow-cyan-500/20"
-          : "text-slate-400 hover:bg-white/5 hover:text-white"
-      }`}
-    >
-      <span
-        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-sm ${
-          active
-            ? "bg-white/15 text-white"
-            : "bg-white/5 text-slate-400 group-hover:text-cyan-300"
-        }`}
-      >
-        {icon}
-      </span>
-
-      {!collapsed && (
-        <span className="truncate">
-          {label}
-        </span>
-      )}
-    </button>
-  );
-}
-
-function Sidebar({
-  sidebarCollapsed,
-  setSidebarCollapsed,
-}) {
-  const adminName =
-    localStorage.getItem("name") ||
-    "Administrator";
-
-  const adminEmail =
-    localStorage.getItem("email") || "";
-
-  const handleLogout = () => {
-    localStorage.removeItem("access_token");
-    localStorage.removeItem("user_id");
-    localStorage.removeItem("name");
-    localStorage.removeItem("email");
-    localStorage.removeItem("role");
-    localStorage.removeItem("is_active");
-
-    window.location.href = "/";
-  };
-
-  return (
-    <aside
-      className={`fixed inset-y-0 left-0 z-40 hidden flex-col bg-slate-950 transition-all duration-300 lg:flex ${
-        sidebarCollapsed
-          ? "w-[76px]"
-          : "w-64"
-      }`}
-    >
-      {/* BRAND */}
-      <div
-        className={`flex h-20 items-center border-b border-white/10 ${
-          sidebarCollapsed
-            ? "justify-center px-3"
-            : "justify-between px-5"
-        }`}
-      >
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-cyan-400 text-lg font-black text-slate-950 shadow-lg shadow-cyan-400/20">
-            S
-          </div>
-
-          {!sidebarCollapsed && (
-            <div>
-              <p className="font-black tracking-[0.2em] text-white">
-                SIMMS
-              </p>
-
-              <p className="text-[9px] uppercase tracking-[0.13em] text-slate-500">
-                Admin Console
-              </p>
-            </div>
-          )}
-        </div>
-
-        {!sidebarCollapsed && (
-          <button
-            type="button"
-            onClick={() =>
-              setSidebarCollapsed(true)
-            }
-            title="Collapse sidebar"
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 transition hover:bg-white/10 hover:text-white"
-          >
-            ‹
-          </button>
-        )}
-
-        {sidebarCollapsed && (
-          <button
-            type="button"
-            onClick={() =>
-              setSidebarCollapsed(false)
-            }
-            title="Expand sidebar"
-            className="absolute -right-3 top-6 flex h-7 w-7 items-center justify-center rounded-full border border-slate-700 bg-slate-900 text-sm font-bold text-cyan-300 shadow-lg transition hover:bg-slate-800"
-          >
-            ›
-          </button>
-        )}
-      </div>
-
-      {/* NAVIGATION */}
-      <div className="hide-scrollbar flex-1 overflow-y-auto px-3 py-7">
-        {!sidebarCollapsed && (
-          <p className="mb-3 px-3 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-600">
-            Main
-          </p>
-        )}
-
-        <nav className="space-y-1">
-          <NavigationItem
-            icon="▦"
-            label="Dashboard"
-            path="/admin/dashboard"
-            collapsed={sidebarCollapsed}
-          />
-
-          <NavigationItem
-            icon="▣"
-            label="Classrooms"
-            path="/admin/rooms"
-            collapsed={sidebarCollapsed}
-          />
-
-          <NavigationItem
-            icon="⌁"
-            label="Devices"
-            path="/admin/devices"
-            collapsed={sidebarCollapsed}
-          />
-
-          <NavigationItem
-            icon="◉"
-            label="Users"
-            path="/admin/users"
-            active
-            collapsed={sidebarCollapsed}
-          />
-        </nav>
-
-        {!sidebarCollapsed && (
-          <p className="mb-3 mt-9 px-3 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-600">
-            Management
-          </p>
-        )}
-
-        <nav className="mt-1 space-y-1">
-          <NavigationItem
-            icon="⌘"
-            label="Calibration"
-            path="/admin/calibration"
-            collapsed={sidebarCollapsed}
-          />
-        </nav>
-
-        {!sidebarCollapsed && (
-          <div className="mt-8 rounded-2xl border border-cyan-400/10 bg-cyan-400/5 p-4">
-            <div className="flex items-center gap-2">
-              <span className="h-2 w-2 rounded-full bg-emerald-400" />
-
-              <span className="text-xs font-semibold text-slate-300">
-                Monitoring active
-              </span>
-            </div>
-
-            <p className="mt-3 text-[11px] leading-5 text-slate-500">
-              SIMMS is connected to the classroom
-              infrastructure monitoring system.
-            </p>
-          </div>
-        )}
-
-        {sidebarCollapsed && (
-          <div
-            title="Monitoring active"
-            className="mx-auto mt-8 flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-400/10"
-          >
-            <span className="h-2 w-2 rounded-full bg-emerald-400" />
-          </div>
-        )}
-      </div>
-
-      {/* FOOTER */}
-      <div className="border-t border-white/10 p-3">
-        {!sidebarCollapsed && (
-          <div className="mb-3 rounded-xl bg-white/5 p-3">
-            <p className="truncate text-xs font-semibold text-white">
-              {adminName}
-            </p>
-
-            <p className="mt-1 truncate text-[10px] text-slate-500">
-              {adminEmail || "Administrator"}
-            </p>
-          </div>
-        )}
-
-        <button
-          type="button"
-          onClick={handleLogout}
-          title={
-            sidebarCollapsed
-              ? "Logout"
-              : undefined
-          }
-          className={`flex w-full items-center rounded-xl text-sm font-semibold text-slate-400 transition hover:bg-red-500/10 hover:text-red-300 ${
-            sidebarCollapsed
-              ? "justify-center px-2 py-2.5"
-              : "gap-3 px-3 py-2.5"
-          }`}
-        >
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/5">
-            ↪
-          </span>
-
-          {!sidebarCollapsed && (
-            <span>Logout</span>
-          )}
-        </button>
-      </div>
-    </aside>
-  );
-}
-
-function StatCard({
-  title,
-  value,
-  description,
-  icon,
-  iconStyle,
-}) {
-  return (
-    <div className="group rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg">
-      <div className="flex items-start justify-between">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-400">
-            {title}
-          </p>
-
-          <p className="mt-3 text-3xl font-black tracking-tight text-slate-900">
-            {value}
-          </p>
-
-          <p className="mt-2 text-xs text-slate-400">
-            {description}
-          </p>
-        </div>
-
-        <div
-          className={`flex h-11 w-11 items-center justify-center rounded-xl text-lg ${iconStyle}`}
-        >
-          {icon}
-        </div>
-      </div>
-    </div>
+    <StatusBadge
+      tone={ROLE_TONE[role] || "neutral"}
+      label={formatLabel(role)}
+      dot={false}
+    />
   );
 }
 
 export default function AdminUsers() {
-  const [sidebarCollapsed, setSidebarCollapsed] =
-    useState(false);
-
   const [users, setUsers] = useState([]);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const [searchTerm, setSearchTerm] =
-    useState("");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [roleFilter, setRoleFilter] = useState("ALL");
+  const [statusFilter, setStatusFilter] = useState("ALL");
 
-  const [roleFilter, setRoleFilter] =
-    useState("ALL");
-
-  const [statusFilter, setStatusFilter] =
-    useState("ALL");
-
-  const [showModal, setShowModal] =
-    useState(false);
-
-  const [editingUser, setEditingUser] =
-    useState(null);
-
-  const [saving, setSaving] =
-    useState(false);
-
-  const [statusUpdatingId, setStatusUpdatingId] =
-    useState(null);
+  const [showModal, setShowModal] = useState(false);
+  const [editingUser, setEditingUser] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [statusUpdatingId, setStatusUpdatingId] = useState(null);
+  const [showPassword, setShowPassword] = useState(false);
 
   const [userForm, setUserForm] = useState({
     name: "",
@@ -388,41 +84,26 @@ export default function AdminUsers() {
     role: "SUPERVISOR",
   });
 
-  const adminName =
-    localStorage.getItem("name") ||
-    "Administrator";
+  const currentUserId = localStorage.getItem("user_id");
 
   const loadUsers = async () => {
     try {
       setLoading(true);
       setError("");
 
-      const response = await fetch(
-        `${API_BASE_URL}/users`,
-        {
-          headers: getAuthHeaders(),
-        }
-      );
+      const response = await fetch(`${API_BASE_URL}/users`, {
+        headers: getAuthHeaders(),
+      });
 
       if (!response.ok) {
-        throw new Error(
-          "Unable to load users from the SIMMS backend."
-        );
+        throw new Error("Unable to load users from the SIMMS backend.");
       }
 
-      const data =
-        await response.json();
+      const data = await response.json();
 
-      setUsers(
-        Array.isArray(data)
-          ? data
-          : []
-      );
+      setUsers(Array.isArray(data) ? data : []);
     } catch (err) {
-      setError(
-        err.message ||
-          "Unable to connect to the SIMMS backend."
-      );
+      setError(err.message || "Unable to connect to the SIMMS backend.");
     } finally {
       setLoading(false);
     }
@@ -434,68 +115,37 @@ export default function AdminUsers() {
 
   const roles = useMemo(() => {
     return Array.from(
-      new Set(
-        users
-          .map((user) => user.role)
-          .filter(Boolean)
-      )
+      new Set(users.map((user) => user.role).filter(Boolean))
     ).sort();
   }, [users]);
 
   const filteredUsers = useMemo(() => {
-    const search =
-      searchTerm.trim().toLowerCase();
+    const search = searchTerm.trim().toLowerCase();
 
     return users.filter((user) => {
       const matchesSearch =
         !search ||
-        String(user.user_id)
-          .toLowerCase()
-          .includes(search) ||
-        String(user.name || "")
-          .toLowerCase()
-          .includes(search) ||
-        String(user.email || "")
-          .toLowerCase()
-          .includes(search) ||
-        String(user.role || "")
-          .toLowerCase()
-          .includes(search);
+        String(user.user_id).toLowerCase().includes(search) ||
+        String(user.name || "").toLowerCase().includes(search) ||
+        String(user.email || "").toLowerCase().includes(search) ||
+        String(user.role || "").toLowerCase().includes(search);
 
-      const matchesRole =
-        roleFilter === "ALL" ||
-        user.role === roleFilter;
+      const matchesRole = roleFilter === "ALL" || user.role === roleFilter;
 
       const matchesStatus =
         statusFilter === "ALL" ||
-        (statusFilter === "ACTIVE" &&
-          user.is_active) ||
-        (statusFilter === "INACTIVE" &&
-          !user.is_active);
+        (statusFilter === "ACTIVE" && user.is_active) ||
+        (statusFilter === "INACTIVE" && !user.is_active);
 
-      return (
-        matchesSearch &&
-        matchesRole &&
-        matchesStatus
-      );
+      return matchesSearch && matchesRole && matchesStatus;
     });
-  }, [
-    users,
-    searchTerm,
-    roleFilter,
-    statusFilter,
-  ]);
+  }, [users, searchTerm, roleFilter, statusFilter]);
 
-  const activeUsers = users.filter(
-    (user) => user.is_active
-  ).length;
+  const activeUsers = users.filter((user) => user.is_active).length;
 
-  const inactiveUsers =
-    users.length - activeUsers;
+  const inactiveUsers = users.length - activeUsers;
 
-  const adminUsers = users.filter(
-    (user) => user.role === "ADMIN"
-  ).length;
+  const adminUsers = users.filter((user) => user.role === "ADMIN").length;
 
   const openAddModal = () => {
     setEditingUser(null);
@@ -507,6 +157,7 @@ export default function AdminUsers() {
       role: "SUPERVISOR",
     });
 
+    setShowPassword(false);
     setShowModal(true);
   };
 
@@ -520,12 +171,17 @@ export default function AdminUsers() {
       role: user.role || "SUPERVISOR",
     });
 
+    setShowPassword(false);
     setShowModal(true);
   };
 
+  // The original close controls were disabled while saving.
+  const closeModal = useCallback(() => {
+    if (!saving) setShowModal(false);
+  }, [saving]);
+
   const handleChange = (event) => {
-    const { name, value } =
-      event.target;
+    const { name, value } = event.target;
 
     setUserForm((previous) => ({
       ...previous,
@@ -536,25 +192,14 @@ export default function AdminUsers() {
   const handleSubmit = async (event) => {
     event.preventDefault();
 
-    if (
-      !userForm.name.trim() ||
-      !userForm.email.trim() ||
-      !userForm.role
-    ) {
-      setError(
-        "Name, email, and role are required."
-      );
+    if (!userForm.name.trim() || !userForm.email.trim() || !userForm.role) {
+      setError("Name, email, and role are required.");
 
       return;
     }
 
-    if (
-      !editingUser &&
-      !userForm.password.trim()
-    ) {
-      setError(
-        "Password is required when creating a user."
-      );
+    if (!editingUser && !userForm.password.trim()) {
+      setError("Password is required when creating a user.");
 
       return;
     }
@@ -574,52 +219,33 @@ export default function AdminUsers() {
        * a user or when the user explicitly enters
        * a new password during editing.
        */
-      if (
-        !editingUser ||
-        userForm.password.trim()
-      ) {
-        payload.password =
-          userForm.password.trim();
+      if (!editingUser || userForm.password.trim()) {
+        payload.password = userForm.password.trim();
       }
 
       const response = editingUser
-        ? await fetch(
-            `${API_BASE_URL}/users/${editingUser.user_id}`,
-            {
-              method: "PUT",
-              headers: getAuthHeaders(),
-              body: JSON.stringify(
-                payload
-              ),
-            }
-          )
-        : await fetch(
-            `${API_BASE_URL}/users`,
-            {
-              method: "POST",
-              headers: getAuthHeaders(),
-              body: JSON.stringify(
-                payload
-              ),
-            }
-          );
+        ? await fetch(`${API_BASE_URL}/users/${editingUser.user_id}`, {
+            method: "PUT",
+            headers: getAuthHeaders(),
+            body: JSON.stringify(payload),
+          })
+        : await fetch(`${API_BASE_URL}/users`, {
+            method: "POST",
+            headers: getAuthHeaders(),
+            body: JSON.stringify(payload),
+          });
 
       if (!response.ok) {
-        let detail =
-          "Unable to save user.";
+        let detail = "Unable to save user.";
 
         try {
-          const data =
-            await response.json();
+          const data = await response.json();
 
           if (data?.detail) {
             detail =
-              typeof data.detail ===
-              "string"
+              typeof data.detail === "string"
                 ? data.detail
-                : JSON.stringify(
-                    data.detail
-                  );
+                : JSON.stringify(data.detail);
           }
         } catch {
           // Keep default error.
@@ -632,25 +258,17 @@ export default function AdminUsers() {
 
       await loadUsers();
     } catch (err) {
-      setError(
-        err.message ||
-          "Unable to save user."
-      );
+      setError(err.message || "Unable to save user.");
     } finally {
       setSaving(false);
     }
   };
 
-  const toggleUserStatus = async (
-    user
-  ) => {
-    const nextStatus =
-      !user.is_active;
+  const toggleUserStatus = async (user) => {
+    const nextStatus = !user.is_active;
 
     try {
-      setStatusUpdatingId(
-        user.user_id
-      );
+      setStatusUpdatingId(user.user_id);
 
       setError("");
 
@@ -666,21 +284,16 @@ export default function AdminUsers() {
       );
 
       if (!response.ok) {
-        let detail =
-          "Unable to update user status.";
+        let detail = "Unable to update user status.";
 
         try {
-          const data =
-            await response.json();
+          const data = await response.json();
 
           if (data?.detail) {
             detail =
-              typeof data.detail ===
-              "string"
+              typeof data.detail === "string"
                 ? data.detail
-                : JSON.stringify(
-                    data.detail
-                  );
+                : JSON.stringify(data.detail);
           }
         } catch {
           // Keep default error.
@@ -691,10 +304,7 @@ export default function AdminUsers() {
 
       await loadUsers();
     } catch (err) {
-      setError(
-        err.message ||
-          "Unable to update user status."
-      );
+      setError(err.message || "Unable to update user status.");
     } finally {
       setStatusUpdatingId(null);
     }
@@ -706,610 +316,453 @@ export default function AdminUsers() {
     setStatusFilter("ALL");
   };
 
+  const hasFilters =
+    searchTerm !== "" || roleFilter !== "ALL" || statusFilter !== "ALL";
+
+  const statusOptions = [
+    { value: "ALL", label: "All", count: users.length },
+    { value: "ACTIVE", label: "Active", count: activeUsers },
+    { value: "INACTIVE", label: "Inactive", count: inactiveUsers },
+  ];
+
   return (
-    <div className="min-h-screen bg-slate-100 text-slate-900">
-      <Sidebar
-        sidebarCollapsed={
-          sidebarCollapsed
-        }
-        setSidebarCollapsed={
-          setSidebarCollapsed
-        }
-      />
+    <AppShell
+      eyebrow="Access"
+      title="Users"
+      actions={
+        <>
+          <RefreshButton onClick={loadUsers} loading={loading} />
+          <button type="button" onClick={openAddModal} className="btn btn-primary">
+            <Icon name="plus" className="h-4 w-4" />
+            <span className="hidden sm:inline">Add user</span>
+            <span className="sr-only sm:hidden">Add user</span>
+          </button>
+        </>
+      }
+    >
+      {error && !showModal && (
+        <Alert
+          tone="danger"
+          title="User data could not be processed"
+          onRetry={loadUsers}
+          onDismiss={() => setError("")}
+          className="mb-6"
+        >
+          {error}
+        </Alert>
+      )}
 
-      <div
-        className={`min-h-screen transition-all duration-300 ${
-          sidebarCollapsed
-            ? "lg:pl-[76px]"
-            : "lg:pl-64"
-        }`}
+      {/* KPIs */}
+      <section aria-label="User metrics" className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
+        <StatCard
+          label="Total users"
+          value={users.length}
+          hint="Registered accounts"
+          icon="users"
+          tone="brand"
+          loading={loading}
+        />
+        <StatCard
+          label="Active"
+          value={activeUsers}
+          hint="Accounts with access"
+          icon="checkCircle"
+          tone="success"
+          loading={loading}
+        />
+        <StatCard
+          label="Inactive"
+          value={inactiveUsers}
+          hint="Access currently revoked"
+          icon="lock"
+          tone="neutral"
+          loading={loading}
+        />
+        <StatCard
+          label="Administrators"
+          value={adminUsers}
+          hint="Accounts with full control"
+          icon="shield"
+          tone="violet"
+          loading={loading}
+        />
+      </section>
+
+      {/* DIRECTORY */}
+      <Card
+        className="mt-6"
+        title="User directory"
+        subtitle={
+          loading
+            ? "Loading accounts…"
+            : `Showing ${filteredUsers.length} of ${users.length} users`
+        }
+        icon="users"
+        bodyClassName=""
       >
-        {/* TOP BAR */}
-        <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
-          <div className="flex h-20 items-center justify-between px-5 sm:px-8">
-            <div className="flex items-center gap-4">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-950 text-sm font-black text-cyan-300 lg:hidden">
-                S
-              </div>
+        {/* Toolbar */}
+        <div className="flex flex-col gap-3 border-b border-slate-100 px-5 py-3.5 lg:flex-row lg:items-center">
+          <SearchInput
+            id="user-search"
+            label="Search users"
+            value={searchTerm}
+            onChange={(event) => setSearchTerm(event.target.value)}
+            placeholder="Search name, email, role or user ID…"
+            className="w-full lg:max-w-sm lg:flex-1"
+          />
 
-              <div>
-                <p className="text-xs font-semibold text-slate-400">
-                  Administration
-                </p>
+          <Segmented
+            ariaLabel="Filter by status"
+            options={statusOptions}
+            value={statusFilter}
+            onChange={setStatusFilter}
+            className="self-start lg:self-auto"
+          />
 
-                <h1 className="text-lg font-bold text-slate-900">
-                  User Management
-                </h1>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <div className="hidden items-center gap-2 rounded-full border border-emerald-100 bg-emerald-50 px-3 py-2 sm:flex">
-                <span className="h-2 w-2 rounded-full bg-emerald-500" />
-
-                <span className="text-xs font-semibold text-emerald-700">
-                  System connected
-                </span>
-              </div>
-
-              <button
-                type="button"
-                onClick={loadUsers}
-                disabled={loading}
-                className="rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm font-semibold text-slate-600 shadow-sm transition hover:bg-slate-50 disabled:opacity-50"
+          <div className="flex items-center gap-3 lg:ml-auto">
+            <div className="flex-1 sm:flex-none">
+              <label htmlFor="user-role-filter" className="sr-only">
+                Role
+              </label>
+              <select
+                id="user-role-filter"
+                value={roleFilter}
+                onChange={(event) => setRoleFilter(event.target.value)}
+                className="select sm:w-48"
               >
-                {loading
-                  ? "Refreshing..."
-                  : "↻ Refresh"}
-              </button>
-
-              <div className="hidden h-10 w-10 items-center justify-center rounded-full bg-cyan-50 text-sm font-bold text-cyan-700 ring-1 ring-cyan-100 sm:flex">
-                {adminName
-                  .charAt(0)
-                  .toUpperCase()}
-              </div>
+                <option value="ALL">All roles</option>
+                {roles.map((role) => (
+                  <option key={role} value={role}>
+                    {formatLabel(role)}
+                  </option>
+                ))}
+              </select>
             </div>
+
+            <button
+              type="button"
+              onClick={clearFilters}
+              disabled={!hasFilters}
+              className="btn btn-ghost"
+            >
+              <Icon name="x" className="h-4 w-4" />
+              Clear
+            </button>
           </div>
-        </header>
+        </div>
 
-        <main className="mx-auto w-full max-w-[1600px] px-5 py-8 sm:px-8">
-          {/* HERO */}
-          <section className="mb-8 overflow-hidden rounded-3xl bg-slate-950 p-7 shadow-xl shadow-slate-300/30 sm:p-9">
-            <div className="relative">
-              <div className="absolute -right-20 -top-32 h-72 w-72 rounded-full border-[40px] border-cyan-400/10" />
+        {loading ? (
+          <SkeletonRows rows={6} />
+        ) : filteredUsers.length === 0 ? (
+          users.length === 0 ? (
+            <EmptyState
+              icon="users"
+              title="No users yet"
+              description="Create administrator, supervisor and maintenance staff accounts to grant access to SIMMS."
+              action={
+                <button type="button" onClick={openAddModal} className="btn btn-primary">
+                  <Icon name="plus" className="h-4 w-4" />
+                  Add user
+                </button>
+              }
+            />
+          ) : (
+            <EmptyState
+              icon="search"
+              title="No users found"
+              description="No users match the current search or filters."
+              action={
+                <button type="button" onClick={clearFilters} className="btn btn-secondary">
+                  Clear filters
+                </button>
+              }
+            />
+          )
+        ) : (
+          <div className="table-wrap">
+            <table className="table min-w-[880px]">
+              <thead>
+                <tr>
+                  <th scope="col">User</th>
+                  <th scope="col">Email</th>
+                  <th scope="col">Role</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Created</th>
+                  <th scope="col" className="text-right">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
 
-              <div className="absolute -bottom-40 right-24 h-80 w-80 rounded-full border-[45px] border-blue-400/5" />
+              <tbody>
+                {filteredUsers.map((user) => {
+                  const isUpdating = statusUpdatingId === user.user_id;
+                  const isCurrentUser =
+                    currentUserId != null &&
+                    String(user.user_id) === String(currentUserId);
+                  const userLabel = user.name || `User ${user.user_id}`;
 
-              <div className="relative z-10 max-w-3xl">
-                <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1.5">
-                  <span className="h-1.5 w-1.5 rounded-full bg-cyan-300" />
+                  return (
+                    <tr key={user.user_id}>
+                      <td>
+                        <div className="flex items-center gap-3">
+                          <span
+                            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold ring-1 ${
+                              user.is_active
+                                ? "bg-brand-50 text-brand-700 ring-brand-100"
+                                : "bg-slate-100 text-slate-500 ring-slate-200"
+                            }`}
+                            aria-hidden="true"
+                          >
+                            {user.name?.charAt(0).toUpperCase() || "U"}
+                          </span>
+                          <div className="min-w-0">
+                            <p className="flex items-center gap-2 font-semibold text-slate-900">
+                              <span className="truncate">{user.name || "—"}</span>
+                              {isCurrentUser && (
+                                <StatusBadge tone="neutral" label="You" dot={false} size="sm" />
+                              )}
+                            </p>
+                            <p className="num mt-0.5 text-[11px] text-slate-500">
+                              ID {user.user_id}
+                            </p>
+                          </div>
+                        </div>
+                      </td>
 
-                  <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-cyan-300">
-                    Access administration
-                  </span>
-                </div>
+                      <td>
+                        <span className="text-slate-600">{user.email || "—"}</span>
+                      </td>
 
-                <h2 className="text-3xl font-black tracking-tight text-white sm:text-4xl">
-                  Manage SIMMS users
-                </h2>
+                      <td>
+                        <RoleBadge role={user.role} />
+                      </td>
 
-                <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-400">
-                  Create and maintain administrator,
-                  supervisor, and maintenance staff
-                  accounts for the SIMMS platform.
-                </p>
+                      <td>
+                        <StatusBadge status={user.is_active ? "ACTIVE" : "INACTIVE"} />
+                      </td>
 
-                <div className="mt-7">
-                  <button
-                    type="button"
-                    onClick={openAddModal}
-                    className="rounded-xl bg-white px-4 py-2.5 text-sm font-bold text-slate-900 transition hover:bg-cyan-50"
-                  >
-                    + Add user
-                  </button>
-                </div>
-              </div>
-            </div>
-          </section>
+                      <td>
+                        <span className="num text-xs text-slate-600">
+                          {formatDate(user.created_at)}
+                        </span>
+                      </td>
 
-          {/* ERROR */}
+                      <td>
+                        <div className="flex justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => openEditModal(user)}
+                            className="btn btn-sm btn-secondary"
+                            aria-label={`Edit ${userLabel}`}
+                          >
+                            <Icon name="edit" className="h-3.5 w-3.5" />
+                            Edit
+                          </button>
+
+                          <button
+                            type="button"
+                            disabled={isUpdating}
+                            onClick={() => toggleUserStatus(user)}
+                            className={`btn btn-sm min-w-[112px] ${
+                              user.is_active
+                                ? "btn-danger-soft"
+                                : "btn-secondary text-emerald-700 hover:text-emerald-800"
+                            }`}
+                            aria-label={`${user.is_active ? "Deactivate" : "Activate"} ${userLabel}`}
+                          >
+                            {isUpdating ? (
+                              <>
+                                <Spinner className="h-3.5 w-3.5" />
+                                Updating…
+                              </>
+                            ) : user.is_active ? (
+                              <>
+                                <Icon name="lock" className="h-3.5 w-3.5" />
+                                Deactivate
+                              </>
+                            ) : (
+                              <>
+                                <Icon name="checkCircle" className="h-3.5 w-3.5" />
+                                Activate
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+
+      {/* ADD / EDIT MODAL */}
+      <Modal
+        open={showModal}
+        onClose={closeModal}
+        title={editingUser ? "Edit user" : "Add user"}
+        description={
+          editingUser
+            ? `Update account details for ${editingUser.name || editingUser.email || `user ${editingUser.user_id}`}.`
+            : "Create a new account and choose its access level."
+        }
+        footer={
+          <>
+            <button
+              type="button"
+              onClick={closeModal}
+              disabled={saving}
+              className="btn btn-secondary"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              form="user-form"
+              disabled={saving}
+              className="btn btn-primary"
+            >
+              {saving ? (
+                <>
+                  <Spinner />
+                  Saving…
+                </>
+              ) : editingUser ? (
+                <>
+                  <Icon name="save" className="h-4 w-4" />
+                  Save changes
+                </>
+              ) : (
+                <>
+                  <Icon name="plus" className="h-4 w-4" />
+                  Create user
+                </>
+              )}
+            </button>
+          </>
+        }
+      >
+        <form id="user-form" onSubmit={handleSubmit} className="space-y-5">
           {error && (
-            <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 p-5">
-              <p className="text-sm font-bold text-red-800">
-                User data could not be processed
-              </p>
+            <Alert tone="danger" onDismiss={() => setError("")}>
+              {error}
+            </Alert>
+          )}
 
-              <p className="mt-1 text-sm text-red-600">
-                {error}
-              </p>
-
-              <button
-                type="button"
-                onClick={loadUsers}
-                className="mt-3 rounded-lg bg-red-600 px-3 py-2 text-xs font-bold text-white hover:bg-red-700"
-              >
-                Try again
-              </button>
+          {editingUser && (
+            <div className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3.5 py-2.5">
+              <span className="num text-xs text-slate-500">User ID {editingUser.user_id}</span>
+              <StatusBadge status={editingUser.is_active ? "ACTIVE" : "INACTIVE"} size="sm" />
             </div>
           )}
 
-          {/* STATS */}
-          <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <StatCard
-              title="Total users"
-              value={users.length}
-              description="Registered accounts"
-              icon="◉"
-              iconStyle="bg-cyan-50 text-cyan-700"
-            />
-
-            <StatCard
-              title="Active"
-              value={activeUsers}
-              description="Currently active accounts"
-              icon="✓"
-              iconStyle="bg-emerald-50 text-emerald-700"
-            />
-
-            <StatCard
-              title="Inactive"
-              value={inactiveUsers}
-              description="Currently inactive accounts"
-              icon="○"
-              iconStyle="bg-slate-100 text-slate-600"
-            />
-
-            <StatCard
-              title="Administrators"
-              value={adminUsers}
-              description="Admin accounts"
-              icon="★"
-              iconStyle="bg-violet-50 text-violet-700"
-            />
-          </section>
-
-          {/* FILTERS */}
-          <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="mb-5">
-              <p className="text-xs font-bold uppercase tracking-[0.12em] text-cyan-600">
-                User directory
-              </p>
-
-              <h2 className="mt-1 text-lg font-bold text-slate-900">
-                Search and filter users
-              </h2>
+          <div className="grid gap-5 sm:grid-cols-2">
+            <div>
+              <label htmlFor="user-name" className="label">
+                Name <span className="text-red-500">*</span>
+              </label>
+              <input
+                id="user-name"
+                type="text"
+                name="name"
+                value={userForm.name}
+                onChange={handleChange}
+                placeholder="Full name"
+                autoComplete="off"
+                aria-required="true"
+                className="input"
+              />
             </div>
 
-            <div className="grid gap-4 lg:grid-cols-[2fr_1fr_1fr_auto]">
-              <div>
-                <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-400">
-                  Search
-                </label>
-
-                <input
-                  type="text"
-                  value={searchTerm}
-                  onChange={(event) =>
-                    setSearchTerm(
-                      event.target.value
-                    )
-                  }
-                  placeholder="Search name, email, role or user ID..."
-                  className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm text-slate-700 outline-none transition focus:border-cyan-400 focus:bg-white focus:ring-2 focus:ring-cyan-100"
-                />
-              </div>
-
-              <div>
-                <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-400">
-                  Role
-                </label>
-
-                <select
-                  value={roleFilter}
-                  onChange={(event) =>
-                    setRoleFilter(
-                      event.target.value
-                    )
-                  }
-                  className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-cyan-400 focus:ring-2 focus:ring-cyan-100"
-                >
-                  <option value="ALL">
-                    All roles
-                  </option>
-
-                  {roles.map((role) => (
-                    <option
-                      key={role}
-                      value={role}
-                    >
-                      {formatStatus(role)}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-400">
-                  Status
-                </label>
-
-                <select
-                  value={statusFilter}
-                  onChange={(event) =>
-                    setStatusFilter(
-                      event.target.value
-                    )
-                  }
-                  className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-cyan-400 focus:ring-2 focus:ring-cyan-100"
-                >
-                  <option value="ALL">
-                    All statuses
-                  </option>
-
-                  <option value="ACTIVE">
-                    Active
-                  </option>
-
-                  <option value="INACTIVE">
-                    Inactive
-                  </option>
-                </select>
-              </div>
-
-              <button
-                type="button"
-                onClick={clearFilters}
-                className="h-11 self-end rounded-xl border border-slate-200 px-4 text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
-              >
-                Clear
-              </button>
+            <div>
+              <label htmlFor="user-email" className="label">
+                Email <span className="text-red-500">*</span>
+              </label>
+              <input
+                id="user-email"
+                type="email"
+                name="email"
+                value={userForm.email}
+                onChange={handleChange}
+                placeholder="user@example.com"
+                autoComplete="off"
+                aria-required="true"
+                className="input"
+              />
             </div>
-          </section>
-
-          {/* TABLE */}
-          <section className="mt-6 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div className="border-b border-slate-100 px-6 py-5">
-              <p className="text-xs font-bold uppercase tracking-[0.12em] text-cyan-600">
-                Registered accounts
-              </p>
-
-              <h2 className="mt-1 text-lg font-bold text-slate-900">
-                System users
-              </h2>
-
-              <p className="mt-1 text-xs text-slate-400">
-                Showing{" "}
-                {filteredUsers.length}{" "}
-                of {users.length} users
-              </p>
-            </div>
-
-            {loading ? (
-              <div className="space-y-3 p-6">
-                {[1, 2, 3, 4, 5].map(
-                  (item) => (
-                    <div
-                      key={item}
-                      className="h-16 animate-pulse rounded-xl bg-slate-100"
-                    />
-                  )
-                )}
-              </div>
-            ) : filteredUsers.length ===
-              0 ? (
-              <div className="px-6 py-16 text-center">
-                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-xl text-slate-400">
-                  ◉
-                </div>
-
-                <p className="mt-4 text-sm font-bold text-slate-700">
-                  No users found
-                </p>
-
-                <p className="mt-1 text-xs text-slate-400">
-                  No users match the current
-                  search or filters.
-                </p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[950px]">
-                  <thead>
-                    <tr className="border-b border-slate-100 bg-slate-50/70">
-                      <th className="px-6 py-4 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                        User
-                      </th>
-
-                      <th className="px-6 py-4 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                        Email
-                      </th>
-
-                      <th className="px-6 py-4 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                        Role
-                      </th>
-
-                      <th className="px-6 py-4 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                        Status
-                      </th>
-
-                      <th className="px-6 py-4 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                        Created
-                      </th>
-
-                      <th className="px-6 py-4 text-right text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                        Actions
-                      </th>
-                    </tr>
-                  </thead>
-
-                  <tbody>
-                    {filteredUsers.map(
-                      (user) => (
-                        <tr
-                          key={user.user_id}
-                          className="border-b border-slate-50 transition last:border-0 hover:bg-slate-50"
-                        >
-                          <td className="px-6 py-4">
-                            <div className="flex items-center gap-3">
-                              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-cyan-50 text-sm font-black text-cyan-700">
-                                {user.name
-                                  ?.charAt(
-                                    0
-                                  )
-                                  .toUpperCase() ||
-                                  "U"}
-                              </div>
-
-                              <div>
-                                <p className="text-sm font-bold text-slate-700">
-                                  {user.name ||
-                                    "—"}
-                                </p>
-
-                                <p className="mt-0.5 text-[10px] text-slate-400">
-                                  User ID{" "}
-                                  {
-                                    user.user_id
-                                  }
-                                </p>
-                              </div>
-                            </div>
-                          </td>
-
-                          <td className="px-6 py-4">
-                            <p className="text-sm text-slate-600">
-                              {user.email ||
-                                "—"}
-                            </p>
-                          </td>
-
-                          <td className="px-6 py-4">
-                            <RoleBadge
-                              role={
-                                user.role
-                              }
-                            />
-                          </td>
-
-                          <td className="px-6 py-4">
-                            <StatusBadge
-                              active={
-                                user.is_active
-                              }
-                            />
-                          </td>
-
-                          <td className="px-6 py-4">
-                            <p className="text-xs font-semibold text-slate-600">
-                              {formatDate(
-                                user.created_at
-                              )}
-                            </p>
-                          </td>
-
-                          <td className="px-6 py-4">
-                            <div className="flex justify-end gap-2">
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  openEditModal(
-                                    user
-                                  )
-                                }
-                                className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 transition hover:bg-slate-50"
-                              >
-                                Edit
-                              </button>
-
-                              <button
-                                type="button"
-                                disabled={
-                                  statusUpdatingId ===
-                                  user.user_id
-                                }
-                                onClick={() =>
-                                  toggleUserStatus(
-                                    user
-                                  )
-                                }
-                                className={`rounded-lg px-3 py-2 text-xs font-bold transition disabled:opacity-50 ${
-                                  user.is_active
-                                    ? "bg-red-50 text-red-600 hover:bg-red-100"
-                                    : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-                                }`}
-                              >
-                                {statusUpdatingId ===
-                                user.user_id
-                                  ? "Updating..."
-                                  : user.is_active
-                                  ? "Deactivate"
-                                  : "Activate"}
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      )
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </section>
-
-          <footer className="mt-8 border-t border-slate-200 py-6">
-            <div className="flex flex-col justify-between gap-2 text-[10px] text-slate-400 sm:flex-row">
-              <p>
-                SIMMS · Smart Classroom
-                Infrastructure Monitoring System
-              </p>
-
-              <p>
-                Administration Console · v1.0
-              </p>
-            </div>
-          </footer>
-        </main>
-      </div>
-
-      {/* ADD / EDIT MODAL */}
-      {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-100 px-6 py-5">
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-cyan-600">
-                  Account configuration
-                </p>
-
-                <h2 className="mt-1 text-lg font-bold text-slate-900">
-                  {editingUser
-                    ? "Edit user"
-                    : "Add user"}
-                </h2>
-              </div>
-
-              <button
-                type="button"
-                onClick={() =>
-                  setShowModal(false)
-                }
-                disabled={saving}
-                className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
-              >
-                ×
-              </button>
-            </div>
-
-            <form
-              onSubmit={handleSubmit}
-              className="space-y-5 p-6"
-            >
-              <div>
-                <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-400">
-                  Name
-                </label>
-
-                <input
-                  type="text"
-                  name="name"
-                  value={userForm.name}
-                  onChange={handleChange}
-                  placeholder="Full name"
-                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-700 outline-none placeholder:text-slate-400 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-100"
-                />
-              </div>
-
-              <div>
-                <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-400">
-                  Email
-                </label>
-
-                <input
-                  type="email"
-                  name="email"
-                  value={userForm.email}
-                  onChange={handleChange}
-                  placeholder="user@example.com"
-                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-700 outline-none placeholder:text-slate-400 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-100"
-                />
-              </div>
-
-              <div>
-                <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-400">
-                  Role
-                </label>
-
-                <select
-                  name="role"
-                  value={userForm.role}
-                  onChange={handleChange}
-                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-cyan-400 focus:ring-2 focus:ring-cyan-100"
-                >
-                  <option value="ADMIN">
-                    Admin
-                  </option>
-
-                  <option value="SUPERVISOR">
-                    Supervisor
-                  </option>
-
-                  <option value="MAINTENANCE_STAFF">
-                    Maintenance Staff
-                  </option>
-                </select>
-              </div>
-
-              <div>
-                <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-400">
-                  {editingUser
-                    ? "New password (optional)"
-                    : "Password"}
-                </label>
-
-                <input
-                  type="password"
-                  name="password"
-                  value={
-                    userForm.password
-                  }
-                  onChange={handleChange}
-                  placeholder={
-                    editingUser
-                      ? "Leave blank to keep current password"
-                      : "Enter password"
-                  }
-                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-700 outline-none placeholder:text-slate-400 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-100"
-                />
-              </div>
-
-              <div className="flex justify-end gap-3 border-t border-slate-100 pt-5">
-                <button
-                  type="button"
-                  onClick={() =>
-                    setShowModal(false)
-                  }
-                  disabled={saving}
-                  className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-600 transition hover:bg-slate-50"
-                >
-                  Cancel
-                </button>
-
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="rounded-xl bg-slate-950 px-5 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:opacity-50"
-                >
-                  {saving
-                    ? "Saving..."
-                    : editingUser
-                    ? "Save changes"
-                    : "Create user"}
-                </button>
-              </div>
-            </form>
           </div>
-        </div>
-      )}
-    </div>
+
+          <div>
+            <label htmlFor="user-role" className="label">
+              Role <span className="text-red-500">*</span>
+            </label>
+            <select
+              id="user-role"
+              name="role"
+              value={userForm.role}
+              onChange={handleChange}
+              aria-required="true"
+              className="select"
+            >
+              {ROLE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <p className="help-text">
+              Determines which console and actions this account can access.
+            </p>
+          </div>
+
+          <div>
+            <label htmlFor="user-password" className="label">
+              {editingUser ? (
+                "New password (optional)"
+              ) : (
+                <>
+                  Password <span className="text-red-500">*</span>
+                </>
+              )}
+            </label>
+            <div className="relative">
+              <input
+                id="user-password"
+                type={showPassword ? "text" : "password"}
+                name="password"
+                value={userForm.password}
+                onChange={handleChange}
+                placeholder={
+                  editingUser
+                    ? "Leave blank to keep current password"
+                    : "Enter password"
+                }
+                autoComplete="new-password"
+                aria-required={editingUser ? undefined : "true"}
+                aria-describedby={editingUser ? "user-password-help" : undefined}
+                className="input pr-10"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((previous) => !previous)}
+                className="btn-icon absolute right-0.5 top-1/2 h-8 w-8 -translate-y-1/2"
+                aria-label={showPassword ? "Hide password" : "Show password"}
+                aria-pressed={showPassword}
+              >
+                <Icon name={showPassword ? "eyeOff" : "eye"} className="h-4 w-4" />
+              </button>
+            </div>
+            {editingUser && (
+              <p id="user-password-help" className="help-text">
+                The current password stays in place unless you enter a new one.
+              </p>
+            )}
+          </div>
+        </form>
+      </Modal>
+    </AppShell>
   );
 }

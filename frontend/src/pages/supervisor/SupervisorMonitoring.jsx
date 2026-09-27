@@ -1,4 +1,19 @@
 import { useEffect, useMemo, useState } from "react";
+import AppShell from "../../components/AppShell";
+import Icon from "../../components/Icon";
+import {
+  Alert,
+  Card,
+  EmptyState,
+  IconTile,
+  RefreshButton,
+  ScoreBar,
+  SkeletonRows,
+  StatCard,
+  StatusBadge,
+} from "../../components/ui";
+import { formatLabel } from "../../lib/format";
+import { navigateTo } from "../../lib/session";
 
 const API_BASE_URL = "http://localhost:8000";
 
@@ -11,10 +26,6 @@ function getAuthHeaders() {
       ? { Authorization: `Bearer ${token}` }
       : {}),
   };
-}
-
-function navigateTo(path) {
-  window.location.href = path;
 }
 
 function formatDateTime(value) {
@@ -31,49 +42,8 @@ function formatDateTime(value) {
   return date.toLocaleString();
 }
 
-function getDisplayValue(value, suffix = "") {
-  if (
-    value === null ||
-    value === undefined ||
-    value === ""
-  ) {
-    return "—";
-  }
-
-  return `${value}${suffix}`;
-}
-
-function getHealthStatusClass(status) {
-  switch (
-    String(status || "").toUpperCase()
-  ) {
-    case "NORMAL":
-      return "border-emerald-400/20 bg-emerald-400/10 text-emerald-300";
-
-    case "WARNING":
-      return "border-amber-400/20 bg-amber-400/10 text-amber-300";
-
-    case "CRITICAL":
-      return "border-red-400/20 bg-red-400/10 text-red-300";
-
-    default:
-      return "border-slate-700 bg-slate-800 text-slate-400";
-  }
-}
-
-function getDeviceStatusClass(status) {
-  switch (
-    String(status || "").toUpperCase()
-  ) {
-    case "ACTIVE":
-      return "border-emerald-400/20 bg-emerald-400/10 text-emerald-300";
-
-    case "INACTIVE":
-      return "border-slate-700 bg-slate-800 text-slate-400";
-
-    default:
-      return "border-slate-700 bg-slate-800 text-slate-400";
-  }
+function isEmptyValue(value) {
+  return value === null || value === undefined || value === "";
 }
 
 function getFaultTypeLabel(faultType) {
@@ -93,142 +63,158 @@ function getFaultTypeLabel(faultType) {
   );
 }
 
-function NavigationItem({
-  icon,
-  label,
-  path,
-  active,
-  collapsed,
-}) {
-  return (
-    <button
-      type="button"
-      onClick={() => navigateTo(path)}
-      title={
-        collapsed ? label : undefined
-      }
-      className={`group flex w-full items-center rounded-xl text-left text-sm font-semibold transition ${
-        collapsed
-          ? "justify-center px-2 py-2.5"
-          : "gap-3 px-3 py-2.5"
-      } ${
-        active
-          ? "bg-cyan-500 text-white shadow-md shadow-cyan-500/20"
-          : "text-slate-400 hover:bg-white/5 hover:text-white"
-      }`}
-    >
-      <span
-        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-sm ${
-          active
-            ? "bg-white/15 text-white"
-            : "bg-white/5 text-slate-400 group-hover:text-cyan-300"
-        }`}
-      >
-        {icon}
-      </span>
+// Units for known observation fields (display only).
+const FIELD_UNITS = {
+  temperature: "°C",
+  humidity: "%",
+  voltage: "V",
+  current: "A",
+  fan_current: "A",
+  power: "W",
+};
 
-      {!collapsed && (
-        <span className="truncate">
-          {label}
-        </span>
-      )}
-    </button>
+const OBSERVATION_ICONS = {
+  ELECTRICAL: "zap",
+  ENVIRONMENT: "thermometer",
+  LIGHT: "lightbulb",
+  ENERGY: "power",
+  OCCUPANCY: "users",
+  FAN_MOTION: "fan",
+  SENSOR: "cpu",
+  VISION: "camera",
+};
+
+/** Sensor reading: tabular value with a muted unit. */
+function Reading({ value, unit, className = "" }) {
+  if (isEmptyValue(value)) {
+    return <span className={`num text-slate-400 ${className}`}>—</span>;
+  }
+
+  return (
+    <span className={`num text-slate-900 ${className}`}>
+      {value}
+      {unit && <span className="ml-0.5 text-[0.75em] font-normal text-slate-500">{unit}</span>}
+    </span>
   );
 }
 
-function MetricCard({
-  label,
-  value,
-  icon,
-  description,
-}) {
-  return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="flex items-start justify-between">
-        <div>
-          <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
-            {label}
-          </p>
+function formatFieldValue(value) {
+  if (typeof value === "boolean") {
+    return value ? "On" : "Off";
+  }
 
-          <p className="mt-3 text-2xl font-black tracking-tight text-slate-900">
-            {value}
-          </p>
-        </div>
+  if (typeof value === "number" && !Number.isInteger(value)) {
+    return Number(value.toFixed(2));
+  }
 
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-cyan-50 text-cyan-600">
-          {icon}
-        </div>
-      </div>
-
-      {description && (
-        <p className="mt-3 text-xs text-slate-500">
-          {description}
-        </p>
-      )}
-    </div>
-  );
+  return value;
 }
 
 function ObservationCard({
   observation,
   type,
+  roomName,
 }) {
   const data =
     observation?.observation_data;
 
+  const observationType =
+    observation?.observation_type ||
+    type;
+
+  const isFlatObject =
+    typeof data === "object" &&
+    data !== null &&
+    !Array.isArray(data) &&
+    Object.values(data).every(
+      (value) =>
+        value === null ||
+        typeof value !== "object"
+    );
+
   return (
-    <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-xs font-black uppercase tracking-[0.1em] text-slate-700">
-            {observation?.observation_type ||
-              type}
-          </p>
+    <li className="px-5 py-4">
+      <div className="flex items-start gap-3">
+        <IconTile
+          icon={OBSERVATION_ICONS[String(observationType).toUpperCase()] || OBSERVATION_ICONS[type]}
+          tone={type === "VISION" ? "violet" : "info"}
+          className="h-8 w-8"
+        />
 
-          <p className="mt-1 text-[10px] text-slate-400">
-            Device #
-            {observation?.device_id ??
-              "—"}
-          </p>
-        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold text-slate-900">
+                {formatLabel(observationType)}
+              </p>
+              <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-xs text-slate-500">
+                <span className="font-medium text-slate-700">{roomName}</span>
+                <span aria-hidden="true">·</span>
+                <span className="num">Device #{observation?.device_id ?? "—"}</span>
+              </p>
+            </div>
 
-        <span className="text-[10px] font-medium text-slate-400">
-          {formatDateTime(
-            observation?.observed_at
+            <span className="flex items-center gap-1 text-[11px] text-slate-500">
+              <Icon name="clock" className="h-3 w-3" />
+              <span className="num">{formatDateTime(observation?.observed_at)}</span>
+            </span>
+          </div>
+
+          {isFlatObject ? (
+            Object.keys(data).length === 0 ? (
+              <p className="mt-2 text-xs text-slate-500">No values reported.</p>
+            ) : (
+              <dl className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                {Object.entries(data).map(([key, value]) => (
+                  <div key={key} className="min-w-0 rounded-lg border border-slate-200 bg-slate-50/60 px-3 py-2">
+                    <dt className="truncate text-[11px] font-medium text-slate-500">{formatLabel(key)}</dt>
+                    <dd className="mt-0.5 text-sm font-semibold">
+                      <Reading value={formatFieldValue(value)} unit={FIELD_UNITS[key]} />
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            )
+          ) : typeof data === "object" &&
+            data !== null ? (
+            <pre className="thin-scrollbar num mt-3 max-h-44 overflow-auto whitespace-pre-wrap break-words rounded-lg border border-slate-200 bg-slate-50/60 p-3 text-[11.5px] leading-5 text-slate-700">
+              {JSON.stringify(
+                data,
+                null,
+                2
+              )}
+            </pre>
+          ) : (
+            <p className="mt-2 text-sm">
+              <Reading value={data} />
+            </p>
           )}
-        </span>
+        </div>
       </div>
+    </li>
+  );
+}
 
-      <div className="mt-3 rounded-xl border border-slate-100 bg-white p-3">
-        {typeof data === "object" &&
-        data !== null ? (
-          <pre className="max-h-44 overflow-auto whitespace-pre-wrap break-words text-[11px] leading-5 text-slate-600">
-            {JSON.stringify(
-              data,
-              null,
-              2
-            )}
-          </pre>
-        ) : (
-          <p className="text-xs text-slate-600">
-            {getDisplayValue(data)}
-          </p>
-        )}
-      </div>
+function HealthGridSkeleton() {
+  return (
+    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3" aria-busy="true" aria-live="polite">
+      <span className="sr-only">Loading monitoring data…</span>
+      {Array.from({ length: 3 }).map((_, index) => (
+        <div key={index} className="card p-5">
+          <span className="skeleton block h-4 w-32" />
+          <span className="skeleton mt-2 block h-3 w-16" />
+          <div className="mt-5 grid grid-cols-2 gap-3">
+            <span className="skeleton block h-14 w-full" />
+            <span className="skeleton block h-14 w-full" />
+          </div>
+          <span className="skeleton mt-4 block h-3 w-full" />
+        </div>
+      ))}
     </div>
   );
 }
 
 export default function SupervisorMonitoring() {
-  const [sidebarCollapsed, setSidebarCollapsed] =
-    useState(false);
-
-  const [supervisorName, setSupervisorName] =
-    useState("Supervisor");
-
-  const [supervisorEmail, setSupervisorEmail] =
-    useState("");
-
   const [classrooms, setClassrooms] =
     useState([]);
 
@@ -253,21 +239,8 @@ export default function SupervisorMonitoring() {
   const [error, setError] =
     useState("");
 
-  useEffect(() => {
-    const storedName =
-      localStorage.getItem("name");
-
-    const storedEmail =
-      localStorage.getItem("email");
-
-    if (storedName) {
-      setSupervisorName(storedName);
-    }
-
-    if (storedEmail) {
-      setSupervisorEmail(storedEmail);
-    }
-  }, []);
+  const [lastUpdated, setLastUpdated] =
+    useState(null);
 
   useEffect(() => {
     loadMonitoringData();
@@ -420,6 +393,8 @@ export default function SupervisorMonitoring() {
       setVisionObservations(
         visionResults.flat()
       );
+
+      setLastUpdated(new Date());
     } catch (err) {
       setError(
         err.message ||
@@ -428,22 +403,6 @@ export default function SupervisorMonitoring() {
     } finally {
       setLoading(false);
     }
-  }
-
-  function handleLogout() {
-    localStorage.removeItem(
-      "access_token"
-    );
-    localStorage.removeItem(
-      "token_type"
-    );
-    localStorage.removeItem("user_id");
-    localStorage.removeItem("name");
-    localStorage.removeItem("email");
-    localStorage.removeItem("role");
-    localStorage.removeItem("is_active");
-
-    window.location.href = "/";
   }
 
   const healthByRoom = useMemo(() => {
@@ -580,729 +539,448 @@ export default function SupervisorMonitoring() {
       );
     }, [filteredHealth]);
 
+  const getRoomName = (roomId) => {
+    const classroom = classrooms.find(
+      (room) =>
+        Number(room.room_id) ===
+        Number(roomId)
+    );
+
+    return (
+      classroom?.room_name ||
+      `Room ${roomId}`
+    );
+  };
+
+  const scopeLabel =
+    selectedRoomId === "ALL"
+      ? "All classrooms"
+      : getRoomName(selectedRoomId);
+
+  const connectionOk = !error && !loading;
+
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900">
-      {/* Sidebar */}
-      <aside
-        className={`fixed inset-y-0 left-0 z-40 hidden flex-col bg-slate-950 transition-all duration-300 lg:flex ${
-          sidebarCollapsed
-            ? "w-[76px]"
-            : "w-64"
-        }`}
-      >
-        <div
-          className={`flex h-20 items-center border-b border-white/10 ${
-            sidebarCollapsed
-              ? "justify-center px-3"
-              : "justify-between px-5"
-          }`}
-        >
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-cyan-400 text-lg font-black text-slate-950 shadow-lg shadow-cyan-400/20">
-              S
-            </div>
-
-            {!sidebarCollapsed && (
-              <div>
-                <p className="font-black tracking-[0.2em] text-white">
-                  SIMMS
-                </p>
-
-                <p className="text-[9px] uppercase tracking-[0.13em] text-slate-500">
-                  Supervisor Console
-                </p>
-              </div>
-            )}
-          </div>
-
-          {!sidebarCollapsed && (
-            <button
-              type="button"
-              onClick={() =>
-                setSidebarCollapsed(true)
-              }
-              title="Collapse sidebar"
-              className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 transition hover:bg-white/10 hover:text-white"
-            >
-              ‹
-            </button>
-          )}
-
-          {sidebarCollapsed && (
-            <button
-              type="button"
-              onClick={() =>
-                setSidebarCollapsed(false)
-              }
-              title="Expand sidebar"
-              className="absolute -right-3 top-6 flex h-7 w-7 items-center justify-center rounded-full border border-slate-700 bg-slate-900 text-sm font-bold text-cyan-300 shadow-lg transition hover:bg-slate-800"
-            >
-              ›
-            </button>
-          )}
+    <AppShell
+      eyebrow="Overview"
+      title="Monitoring"
+      actions={
+        <RefreshButton
+          onClick={loadMonitoringData}
+          loading={loading}
+        />
+      }
+    >
+      {/* TOOLBAR */}
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div className="min-w-0">
+          <p className="eyebrow mb-1.5">Current sensor and vision information</p>
+          <h2 className="text-2xl font-bold tracking-tight text-slate-900">
+            Infrastructure monitoring
+          </h2>
+          <p className="mt-1.5 max-w-2xl text-sm text-slate-500">
+            Latest classroom conditions, occupancy, sensor and vision observations, and confirmed faults.
+          </p>
         </div>
 
-        <div className="hide-scrollbar flex-1 overflow-y-auto px-3 py-7">
-          {!sidebarCollapsed && (
-            <p className="mb-3 px-3 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-600">
-              Main
-            </p>
-          )}
-
-          <nav className="space-y-1">
-            <NavigationItem
-              icon="▦"
-              label="Dashboard"
-              path="/supervisor/dashboard"
-              collapsed={sidebarCollapsed}
-            />
-
-            <NavigationItem
-              icon="▣"
-              label="Classrooms"
-              path="/supervisor/classrooms"
-              collapsed={sidebarCollapsed}
-            />
-
-            <NavigationItem
-              icon="⌁"
-              label="Monitoring"
-              path="/supervisor/monitoring"
-              active
-              collapsed={sidebarCollapsed}
-            />
-          </nav>
-
-          {!sidebarCollapsed && (
-            <p className="mb-3 mt-9 px-3 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-600">
-              Operations
-            </p>
-          )}
-
-          <nav className="mt-1 space-y-1">
-            <NavigationItem
-              icon="⚠"
-              label="Faults"
-              path="/supervisor/faults"
-              collapsed={sidebarCollapsed}
-            />
-
-            <NavigationItem
-              icon="⌘"
-              label="Tickets"
-              path="/supervisor/tickets"
-              collapsed={sidebarCollapsed}
-            />
-
-            <NavigationItem
-              icon="◉"
-              label="Notifications"
-              path="/supervisor/notifications"
-              collapsed={sidebarCollapsed}
-            />
-          </nav>
-
-          {!sidebarCollapsed && (
-            <div className="mt-8 rounded-2xl border border-cyan-400/10 bg-cyan-400/5 p-4">
-              <div className="flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full bg-emerald-400" />
-
-                <span className="text-xs font-semibold text-slate-300">
-                  Monitoring active
-                </span>
-              </div>
-
-              <p className="mt-3 text-[11px] leading-5 text-slate-500">
-                SIMMS is connected to the classroom
-                infrastructure monitoring system.
-              </p>
-            </div>
-          )}
-
-          {sidebarCollapsed && (
-            <div
-              title="Monitoring active"
-              className="mx-auto mt-8 flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-400/10"
-            >
-              <span className="h-2 w-2 rounded-full bg-emerald-400" />
-            </div>
-          )}
-        </div>
-
-        <div className="border-t border-white/10 p-3">
-          {!sidebarCollapsed && (
-            <div className="mb-3 rounded-xl bg-white/5 p-3">
-              <p className="truncate text-xs font-semibold text-white">
-                {supervisorName}
-              </p>
-
-              <p className="mt-1 truncate text-[10px] text-slate-500">
-                {supervisorEmail ||
-                  "Supervisor"}
-              </p>
-            </div>
-          )}
-
-          <button
-            type="button"
-            onClick={handleLogout}
-            title={
-              sidebarCollapsed
-                ? "Logout"
-                : undefined
-            }
-            className={`flex w-full items-center rounded-xl text-sm font-semibold text-slate-400 transition hover:bg-red-500/10 hover:text-red-300 ${
-              sidebarCollapsed
-                ? "justify-center px-2 py-2.5"
-                : "gap-3 px-3 py-2.5"
-            }`}
+        <div className="flex flex-col gap-3 sm:items-end">
+          <div
+            className="flex flex-wrap items-center gap-2 text-xs text-slate-500"
+            role="status"
+            aria-live="polite"
           >
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/5">
-              ↪
-            </span>
-
-            {!sidebarCollapsed && (
-              <span>Logout</span>
-            )}
-          </button>
-        </div>
-      </aside>
-
-      {/* Main */}
-      <div
-        className={`min-h-screen transition-all duration-300 ${
-          sidebarCollapsed
-            ? "lg:pl-[76px]"
-            : "lg:pl-64"
-        }`}
-      >
-        <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
-          <div className="flex min-h-20 items-center justify-between gap-4 px-5 py-3 sm:px-8">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-950 text-sm font-black text-cyan-300 lg:hidden">
-                S
-              </div>
-
-              <div>
-                <p className="text-xs font-bold uppercase tracking-[0.14em] text-cyan-600">
-                  Supervisor
-                </p>
-
-                <h1 className="text-xl font-black tracking-tight text-slate-900 sm:text-2xl">
-                  Live Monitoring
-                </h1>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <select
-                value={selectedRoomId}
-                onChange={(event) =>
-                  setSelectedRoomId(
-                    event.target.value
-                  )
-                }
-                className="max-w-[170px] rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-bold text-slate-600 outline-none transition focus:border-cyan-400 focus:ring-4 focus:ring-cyan-400/10 sm:max-w-none"
-              >
-                <option value="ALL">
-                  All classrooms
-                </option>
-
-                {classrooms.map(
-                  (classroom) => (
-                    <option
-                      key={
-                        classroom.room_id
-                      }
-                      value={
-                        classroom.room_id
-                      }
-                    >
-                      {classroom.room_name ||
-                        `Room ${classroom.room_id}`}
-                    </option>
-                  )
-                )}
-              </select>
-
-              <button
-                type="button"
-                onClick={loadMonitoringData}
-                disabled={loading}
-                className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-bold text-slate-600 transition hover:border-cyan-300 hover:text-cyan-600 disabled:opacity-50"
-              >
-                {loading
-                  ? "Refreshing..."
-                  : "↻ Refresh"}
-              </button>
-            </div>
-          </div>
-        </header>
-
-        <main className="px-5 py-7 sm:px-8 sm:py-9">
-          <div className="mb-7">
-            <p className="text-sm font-medium text-slate-500">
-              Current sensor and vision information
-            </p>
-
-            <h2 className="mt-1 text-2xl font-black tracking-tight text-slate-900">
-              Infrastructure Monitoring
-            </h2>
-
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
-              Observe the latest available classroom
-              conditions, occupancy, sensor observations,
-              vision observations and confirmed faults.
-            </p>
-          </div>
-
-          {error && (
-            <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 px-5 py-4">
-              <p className="text-sm font-bold text-red-700">
-                Monitoring data could not be loaded
-              </p>
-
-              <p className="mt-1 text-xs leading-5 text-red-600">
-                {error}
-              </p>
-
-              <button
-                type="button"
-                onClick={loadMonitoringData}
-                className="mt-3 rounded-xl bg-red-600 px-4 py-2 text-xs font-bold text-white transition hover:bg-red-700"
-              >
-                Try again
-              </button>
-            </div>
-          )}
-
-          {/* Metrics */}
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <MetricCard
-              label="Classrooms"
-              value={
-                loading
-                  ? "—"
-                  : selectedRoomId ===
-                      "ALL"
-                    ? classrooms.length
-                    : 1
-              }
-              icon="▣"
-              description="Monitoring scope"
-            />
-
-            <MetricCard
-              label="Occupancy"
-              value={
-                loading
-                  ? "—"
-                  : totalPeople
-              }
-              icon="♙"
-              description="Detected people"
-            />
-
-            <MetricCard
-              label="Temperature"
-              value={
-                loading
-                  ? "—"
-                  : getDisplayValue(
-                      averageTemperature !==
-                        null
-                        ? averageTemperature.toFixed(
-                            1
-                          )
-                        : null,
-                      "°C"
-                    )
-              }
-              icon="🌡"
-              description="Average available reading"
-            />
-
-            <MetricCard
-              label="Active faults"
-              value={
-                loading
-                  ? "—"
-                  : filteredFaults.length
-              }
-              icon="⚠"
-              description="Confirmed active faults"
-            />
-          </div>
-
-          {/* Health overview */}
-          <section className="mt-8">
-            <div className="mb-4 flex items-end justify-between">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-[0.14em] text-cyan-600">
-                  Current condition
-                </p>
-
-                <h3 className="mt-1 text-xl font-black text-slate-900">
-                  Classroom health
-                </h3>
-              </div>
-
-              <span className="hidden text-xs font-medium text-slate-400 sm:block">
-                Latest available health records
-              </span>
-            </div>
-
             {loading ? (
-              <div className="rounded-2xl border border-slate-200 bg-white px-6 py-12 text-center shadow-sm">
-                <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-slate-200 border-t-cyan-500" />
-
-                <p className="mt-4 text-sm font-semibold text-slate-500">
-                  Loading monitoring data...
-                </p>
-              </div>
-            ) : filteredHealth.length ===
-              0 ? (
-              <div className="rounded-2xl border border-slate-200 bg-white px-6 py-12 text-center shadow-sm">
-                <p className="text-sm font-bold text-slate-700">
-                  No health data available
-                </p>
-
-                <p className="mt-1 text-xs text-slate-400">
-                  No calculated health record is
-                  currently available for the selected
-                  classroom.
-                </p>
-              </div>
+              <span className="inline-flex items-center gap-1.5 font-medium text-slate-600">
+                <span className="h-2 w-2 rounded-full bg-slate-300" aria-hidden="true" />
+                Syncing…
+              </span>
+            ) : connectionOk ? (
+              <span className="inline-flex items-center gap-1.5 font-semibold text-emerald-700">
+                <span className="h-2 w-2 rounded-full bg-emerald-500" aria-hidden="true" />
+                Connected
+              </span>
             ) : (
-              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                {filteredHealth.map(
-                  (item) => {
-                    const classroom =
-                      classrooms.find(
-                        (room) =>
-                          Number(
-                            room.room_id
-                          ) ===
-                          Number(
-                            item.room_id
-                          )
-                      );
-
-                    return (
-                      <button
-                        type="button"
-                        key={
-                          item.room_id
-                        }
-                        onClick={() =>
-                          navigateTo(
-                            `/supervisor/classrooms/${item.room_id}`
-                          )
-                        }
-                        className="rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-cyan-200 hover:shadow-md"
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <p className="font-black text-slate-900">
-                              {classroom?.room_name ||
-                                `Room ${item.room_id}`}
-                            </p>
-
-                            <p className="mt-1 text-xs text-slate-400">
-                              Room #
-                              {
-                                item.room_id
-                              }
-                            </p>
-                          </div>
-
-                          <span
-                            className={`rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide ${getHealthStatusClass(
-                              item.health_status
-                            )}`}
-                          >
-                            {item.health_status ||
-                              "UNKNOWN"}
-                          </span>
-                        </div>
-
-                        <div className="mt-5 grid grid-cols-2 gap-3">
-                          <div className="rounded-xl bg-slate-50 p-3">
-                            <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400">
-                              Score
-                            </p>
-
-                            <p className="mt-1 text-lg font-black text-slate-800">
-                              {getDisplayValue(
-                                item.health_score
-                              )}
-                            </p>
-                          </div>
-
-                          <div className="rounded-xl bg-slate-50 p-3">
-                            <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400">
-                              Occupancy
-                            </p>
-
-                            <p className="mt-1 text-lg font-black text-slate-800">
-                              {getDisplayValue(
-                                item.occupancy_count
-                              )}
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="mt-3 flex items-center justify-between text-xs">
-                          <span className="text-slate-500">
-                            🌡{" "}
-                            {getDisplayValue(
-                              item.temperature,
-                              "°C"
-                            )}
-                          </span>
-
-                          <span className="text-slate-500">
-                            💧{" "}
-                            {getDisplayValue(
-                              item.humidity,
-                              "%"
-                            )}
-                          </span>
-
-                          <span className="text-slate-500">
-                            ⚡{" "}
-                            {getDisplayValue(
-                              item.power,
-                              " W"
-                            )}
-                          </span>
-                        </div>
-                      </button>
-                    );
-                  }
-                )}
-              </div>
+              <span className="inline-flex items-center gap-1.5 font-semibold text-red-700">
+                <Icon name="wifiOff" className="h-3.5 w-3.5" />
+                Disconnected
+              </span>
             )}
-          </section>
+            <span aria-hidden="true">·</span>
+            <span className="inline-flex items-center gap-1">
+              <Icon name="clock" className="h-3 w-3" />
+              Updated{" "}
+              <span className="num font-medium text-slate-700">
+                {lastUpdated ? lastUpdated.toLocaleTimeString() : "—"}
+              </span>
+            </span>
+          </div>
 
-          {/* Sensor and vision */}
-          <section className="mt-8 grid gap-6 xl:grid-cols-2">
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="mb-5 flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-xs font-bold uppercase tracking-[0.14em] text-cyan-600">
-                    IoT
-                  </p>
+          <div className="flex items-center gap-2">
+            <label htmlFor="monitoring-room" className="text-[13px] font-medium text-slate-600">
+              Classroom
+            </label>
+            <select
+              id="monitoring-room"
+              value={selectedRoomId}
+              onChange={(event) =>
+                setSelectedRoomId(
+                  event.target.value
+                )
+              }
+              className="select w-auto min-w-0 max-w-[220px]"
+            >
+              <option value="ALL">
+                All classrooms
+              </option>
 
-                  <h3 className="mt-1 text-lg font-black text-slate-900">
-                    Sensor observations
-                  </h3>
-                </div>
-
-                <span className="rounded-full bg-cyan-50 px-3 py-1.5 text-xs font-bold text-cyan-600">
-                  {filteredSensors.length}
-                </span>
-              </div>
-
-              {loading ? (
-                <div className="py-10 text-center text-xs text-slate-400">
-                  Loading sensor data...
-                </div>
-              ) : filteredSensors.length ===
-                0 ? (
-                <div className="rounded-xl bg-slate-50 px-4 py-10 text-center">
-                  <p className="text-sm font-bold text-slate-600">
-                    No sensor observations
-                  </p>
-
-                  <p className="mt-1 text-xs text-slate-400">
-                    No latest sensor information is
-                    available.
-                  </p>
-                </div>
-              ) : (
-                <div className="max-h-[560px] space-y-3 overflow-y-auto pr-1">
-                  {filteredSensors.map(
-                    (observation, index) => (
-                      <ObservationCard
-                        key={
-                          observation.observation_id ||
-                          `${observation.room_id}-${index}`
-                        }
-                        observation={
-                          observation
-                        }
-                        type="SENSOR"
-                      />
-                    )
-                  )}
-                </div>
+              {classrooms.map(
+                (classroom) => (
+                  <option
+                    key={
+                      classroom.room_id
+                    }
+                    value={
+                      classroom.room_id
+                    }
+                  >
+                    {classroom.room_name ||
+                      `Room ${classroom.room_id}`}
+                  </option>
+                )
               )}
-            </div>
-
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="mb-5 flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-xs font-bold uppercase tracking-[0.14em] text-cyan-600">
-                    Vision
-                  </p>
-
-                  <h3 className="mt-1 text-lg font-black text-slate-900">
-                    Vision observations
-                  </h3>
-                </div>
-
-                <span className="rounded-full bg-cyan-50 px-3 py-1.5 text-xs font-bold text-cyan-600">
-                  {filteredVision.length}
-                </span>
-              </div>
-
-              {loading ? (
-                <div className="py-10 text-center text-xs text-slate-400">
-                  Loading vision data...
-                </div>
-              ) : filteredVision.length ===
-                0 ? (
-                <div className="rounded-xl bg-slate-50 px-4 py-10 text-center">
-                  <p className="text-sm font-bold text-slate-600">
-                    No vision observations
-                  </p>
-
-                  <p className="mt-1 text-xs text-slate-400">
-                    No latest vision information is
-                    available.
-                  </p>
-                </div>
-              ) : (
-                <div className="max-h-[560px] space-y-3 overflow-y-auto pr-1">
-                  {filteredVision.map(
-                    (observation, index) => (
-                      <ObservationCard
-                        key={
-                          observation.vision_observation_id ||
-                          `${observation.room_id}-${index}`
-                        }
-                        observation={
-                          observation
-                        }
-                        type="VISION"
-                      />
-                    )
-                  )}
-                </div>
-              )}
-            </div>
-          </section>
-
-          {/* Active faults */}
-          <section className="mt-8 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div className="border-b border-slate-100 px-5 py-5 sm:px-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs font-bold uppercase tracking-[0.14em] text-red-500">
-                    Operations
-                  </p>
-
-                  <h3 className="mt-1 text-lg font-black text-slate-900">
-                    Active faults
-                  </h3>
-                </div>
-
-                <span className="rounded-full bg-red-50 px-3 py-1.5 text-xs font-bold text-red-600">
-                  {filteredFaults.length}
-                </span>
-              </div>
-            </div>
-
-            {filteredFaults.length ===
-            0 ? (
-              <div className="px-6 py-12 text-center">
-                <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-50 text-emerald-500">
-                  ✓
-                </div>
-
-                <p className="mt-3 text-sm font-bold text-slate-700">
-                  No active faults
-                </p>
-
-                <p className="mt-1 text-xs text-slate-400">
-                  No confirmed active faults are
-                  currently in the selected monitoring
-                  scope.
-                </p>
-              </div>
-            ) : (
-              <div className="divide-y divide-slate-100">
-                {filteredFaults.map(
-                  (fault) => {
-                    const classroom =
-                      classrooms.find(
-                        (room) =>
-                          Number(
-                            room.room_id
-                          ) ===
-                          Number(
-                            fault.room_id
-                          )
-                      );
-
-                    return (
-                      <button
-                        type="button"
-                        key={
-                          fault.fault_id
-                        }
-                        onClick={() =>
-                          navigateTo(
-                            `/supervisor/faults/${fault.fault_id}`
-                          )
-                        }
-                        className="flex w-full items-center justify-between gap-5 px-5 py-5 text-left transition hover:bg-slate-50 sm:px-6"
-                      >
-                        <div className="min-w-0">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="rounded-lg bg-red-50 px-2.5 py-1 text-[10px] font-bold uppercase text-red-600">
-                              {getFaultTypeLabel(
-                                fault.fault_type
-                              )}
-                            </span>
-
-                            <span className="text-xs text-slate-400">
-                              Fault #
-                              {
-                                fault.fault_id
-                              }
-                            </span>
-                          </div>
-
-                          <p className="mt-2 text-sm font-bold text-slate-800">
-                            {classroom?.room_name ||
-                              `Room ${fault.room_id}`}
-                          </p>
-
-                          <p className="mt-1 text-xs text-slate-400">
-                            {fault.device_id
-                              ? `Device #${fault.device_id}`
-                              : "Room-level fault"}{" "}
-                            · Detected{" "}
-                            {formatDateTime(
-                              fault.detected_at
-                            )}
-                          </p>
-                        </div>
-
-                        <span className="shrink-0 text-sm font-bold text-cyan-600">
-                          View →
-                        </span>
-                      </button>
-                    );
-                  }
-                )}
-              </div>
-            )}
-          </section>
-        </main>
+            </select>
+          </div>
+        </div>
       </div>
-    </div>
+
+      {error && (
+        <Alert
+          tone="danger"
+          title="Monitoring data could not be loaded"
+          onRetry={loadMonitoringData}
+          className="mb-6"
+        >
+          {error}
+        </Alert>
+      )}
+
+      {/* KPIs */}
+      <section aria-label="Key metrics" className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
+        <StatCard
+          label="Classrooms"
+          value={
+            selectedRoomId === "ALL"
+              ? classrooms.length
+              : 1
+          }
+          hint={`Monitoring scope · ${scopeLabel}`}
+          icon="classroom"
+          tone="brand"
+          loading={loading}
+        />
+        <StatCard
+          label="Occupancy"
+          value={totalPeople}
+          hint="Detected people"
+          icon="users"
+          tone="violet"
+          loading={loading}
+        />
+        <StatCard
+          label="Avg. temperature"
+          value={
+            averageTemperature !== null ? (
+              <>
+                {averageTemperature.toFixed(1)}
+                <span className="ml-1 text-base font-medium text-slate-500">°C</span>
+              </>
+            ) : (
+              "—"
+            )
+          }
+          hint={
+            averageHumidity !== null
+              ? `Avg. humidity ${averageHumidity.toFixed(1)}%`
+              : "Average available reading"
+          }
+          icon="thermometer"
+          tone="info"
+          loading={loading}
+        />
+        <StatCard
+          label="Active faults"
+          value={filteredFaults.length}
+          hint={
+            filteredFaults.length > 0
+              ? "Confirmed active faults"
+              : "No confirmed faults"
+          }
+          icon="alert"
+          tone={filteredFaults.length > 0 ? "danger" : "success"}
+          loading={loading}
+        />
+      </section>
+
+      {/* HEALTH */}
+      <section className="mt-6" aria-labelledby="classroom-health-heading">
+        <div className="mb-3 flex items-end justify-between gap-3">
+          <div>
+            <p className="eyebrow mb-1">Current condition</p>
+            <h3 id="classroom-health-heading" className="text-base font-semibold tracking-tight text-slate-900">
+              Classroom health
+            </h3>
+          </div>
+
+          <span className="hidden text-xs text-slate-500 sm:block">
+            Latest available health records
+          </span>
+        </div>
+
+        {loading ? (
+          <HealthGridSkeleton />
+        ) : filteredHealth.length === 0 ? (
+          <div className="card">
+            <EmptyState
+              icon="heart"
+              title="No health data available"
+              description="No calculated health record is currently available for the selected classroom."
+            />
+          </div>
+        ) : (
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {filteredHealth.map((item) => {
+              const health =
+                healthByRoom.get(Number(item.room_id)) || item;
+
+              return (
+                <button
+                  type="button"
+                  key={item.room_id}
+                  onClick={() =>
+                    navigateTo(
+                      `/supervisor/classrooms/${item.room_id}`
+                    )
+                  }
+                  className="card card-hover flex w-full flex-col p-5 text-left"
+                >
+                  <div className="flex w-full items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-slate-900">
+                        {getRoomName(item.room_id)}
+                      </p>
+                      <p className="num mt-0.5 text-[11px] text-slate-500">
+                        Room #{item.room_id}
+                      </p>
+                    </div>
+
+                    <StatusBadge status={health.health_status || "UNKNOWN"} />
+                  </div>
+
+                  <div className="mt-4 grid w-full grid-cols-2 gap-3">
+                    <div className="rounded-lg border border-slate-200 bg-slate-50/60 px-3 py-2.5">
+                      <p className="text-[11px] font-medium text-slate-500">Score</p>
+                      <p className="mt-0.5 text-xl font-semibold leading-tight">
+                        <Reading value={health.health_score} />
+                      </p>
+                      {!isEmptyValue(health.health_score) && (
+                        <ScoreBar value={health.health_score} className="mt-2" />
+                      )}
+                    </div>
+
+                    <div className="rounded-lg border border-slate-200 bg-slate-50/60 px-3 py-2.5">
+                      <p className="text-[11px] font-medium text-slate-500">Occupancy</p>
+                      <p className="mt-0.5 text-xl font-semibold leading-tight">
+                        <Reading
+                          value={health.occupancy_count}
+                          unit={isEmptyValue(health.occupancy_count) ? "" : "ppl"}
+                        />
+                      </p>
+                    </div>
+                  </div>
+
+                  <dl className="mt-4 grid w-full grid-cols-3 gap-2 border-t border-slate-100 pt-3">
+                    {[
+                      { label: "Temp", icon: "thermometer", value: health.temperature, unit: "°C" },
+                      { label: "Humidity", icon: "gauge", value: health.humidity, unit: "%" },
+                      { label: "Power", icon: "zap", value: health.power, unit: "W" },
+                    ].map((metric) => (
+                      <div key={metric.label} className="min-w-0">
+                        <dt className="flex items-center gap-1 text-[11px] font-medium text-slate-500">
+                          <Icon name={metric.icon} className="h-3 w-3" />
+                          {metric.label}
+                        </dt>
+                        <dd className="mt-0.5 truncate text-sm font-semibold">
+                          <Reading value={metric.value} unit={metric.unit} />
+                        </dd>
+                      </div>
+                    ))}
+                  </dl>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      {/* SENSOR + VISION */}
+      <section className="mt-6 grid gap-6 xl:grid-cols-2">
+        <Card
+          title="Sensor observations"
+          subtitle="Latest IoT readings per classroom"
+          icon="cpu"
+          bodyClassName=""
+          actions={
+            <span className="num rounded-md bg-slate-100 px-2 py-1 text-[11px] font-medium text-slate-600">
+              {filteredSensors.length}
+            </span>
+          }
+        >
+          {loading ? (
+            <SkeletonRows rows={3} />
+          ) : filteredSensors.length === 0 ? (
+            <EmptyState
+              icon="cpu"
+              title="No sensor observations"
+              description="No latest sensor information is available."
+            />
+          ) : (
+            <ul className="thin-scrollbar max-h-[560px] divide-y divide-slate-100 overflow-y-auto">
+              {filteredSensors.map(
+                (observation, index) => (
+                  <ObservationCard
+                    key={
+                      observation.observation_id ||
+                      `${observation.room_id}-${index}`
+                    }
+                    observation={
+                      observation
+                    }
+                    type="SENSOR"
+                    roomName={getRoomName(observation.room_id)}
+                  />
+                )
+              )}
+            </ul>
+          )}
+        </Card>
+
+        <Card
+          title="Vision observations"
+          subtitle="Latest camera detections per classroom"
+          icon="camera"
+          bodyClassName=""
+          actions={
+            <span className="num rounded-md bg-slate-100 px-2 py-1 text-[11px] font-medium text-slate-600">
+              {filteredVision.length}
+            </span>
+          }
+        >
+          {loading ? (
+            <SkeletonRows rows={3} />
+          ) : filteredVision.length === 0 ? (
+            <EmptyState
+              icon="camera"
+              title="No vision observations"
+              description="No latest vision information is available."
+            />
+          ) : (
+            <ul className="thin-scrollbar max-h-[560px] divide-y divide-slate-100 overflow-y-auto">
+              {filteredVision.map(
+                (observation, index) => (
+                  <ObservationCard
+                    key={
+                      observation.vision_observation_id ||
+                      `${observation.room_id}-${index}`
+                    }
+                    observation={
+                      observation
+                    }
+                    type="VISION"
+                    roomName={getRoomName(observation.room_id)}
+                  />
+                )
+              )}
+            </ul>
+          )}
+        </Card>
+      </section>
+
+      {/* ACTIVE FAULTS */}
+      <Card
+        className="mt-6"
+        title="Active faults"
+        subtitle="Confirmed faults in the selected monitoring scope"
+        icon="alert"
+        bodyClassName=""
+        actions={
+          filteredFaults.length > 0 ? (
+            <StatusBadge tone="danger" label={`${filteredFaults.length} active`} />
+          ) : (
+            <StatusBadge tone="success" label="All clear" />
+          )
+        }
+      >
+        {loading ? (
+          <SkeletonRows rows={2} />
+        ) : filteredFaults.length === 0 ? (
+          <EmptyState
+            icon="checkCircle"
+            title="No active faults"
+            description="No confirmed active faults are currently in the selected monitoring scope."
+          />
+        ) : (
+          <ul className="divide-y divide-slate-100">
+            {filteredFaults.map((fault) => (
+              <li key={fault.fault_id}>
+                <button
+                  type="button"
+                  onClick={() =>
+                    navigateTo(
+                      `/supervisor/faults/${fault.fault_id}`
+                    )
+                  }
+                  className="group flex w-full items-center gap-3 px-5 py-3.5 text-left transition-colors hover:bg-slate-50"
+                >
+                  <IconTile icon="alert" tone="danger" className="h-8 w-8" />
+
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-sm font-semibold text-slate-900">
+                        {getFaultTypeLabel(fault.fault_type)}
+                      </p>
+                      <span className="num text-[11px] text-slate-500">
+                        Fault #{fault.fault_id}
+                      </span>
+                    </div>
+
+                    <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-xs text-slate-500">
+                      <span className="font-medium text-slate-700">
+                        {getRoomName(fault.room_id)}
+                      </span>
+                      <span aria-hidden="true">·</span>
+                      <span className="num">
+                        {fault.device_id
+                          ? `Device #${fault.device_id}`
+                          : "Room-level fault"}
+                      </span>
+                      <span aria-hidden="true">·</span>
+                      <span>
+                        Detected{" "}
+                        <span className="num">{formatDateTime(fault.detected_at)}</span>
+                      </span>
+                    </p>
+                  </div>
+
+                  <span className="hidden shrink-0 items-center gap-1 text-[13px] font-semibold text-brand-700 sm:inline-flex">
+                    View
+                    <Icon name="chevronRight" className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+                  </span>
+                  <Icon name="chevronRight" className="h-4 w-4 shrink-0 text-slate-400 sm:hidden" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+    </AppShell>
   );
 }

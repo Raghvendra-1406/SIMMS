@@ -1,4 +1,16 @@
 import { useEffect, useRef, useState } from "react";
+import AppShell from "../../components/AppShell";
+import Icon from "../../components/Icon";
+import {
+  Alert,
+  Card,
+  DetailItem,
+  EmptyState,
+  PageHeader,
+  RefreshButton,
+  Spinner,
+  StatusBadge,
+} from "../../components/ui";
 
 const API_BASE_URL = "http://localhost:8000";
 
@@ -8,10 +20,6 @@ function getAuthHeaders() {
   return {
     Authorization: `Bearer ${token}`,
   };
-}
-
-function navigateTo(path) {
-  window.location.href = path;
 }
 
 function formatDate(value) {
@@ -26,97 +34,16 @@ function formatDate(value) {
   return date.toLocaleString();
 }
 
-function NavigationItem({
-  icon,
-  label,
-  path,
-  active,
-  collapsed,
-}) {
-  return (
-    <button
-      type="button"
-      onClick={() => navigateTo(path)}
-      title={collapsed ? label : undefined}
-      className={`group flex w-full items-center rounded-xl text-left text-sm font-semibold transition ${
-        collapsed
-          ? "justify-center px-2 py-2.5"
-          : "gap-3 px-3 py-2.5"
-      } ${
-        active
-          ? "bg-cyan-500 text-white shadow-md shadow-cyan-500/20"
-          : "text-slate-400 hover:bg-white/5 hover:text-white"
-      }`}
-    >
-      <span
-        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-sm ${
-          active
-            ? "bg-white/15 text-white"
-            : "bg-white/5 text-slate-400 group-hover:text-cyan-300"
-        }`}
-      >
-        {icon}
-      </span>
-
-      {!collapsed && (
-        <span className="truncate">
-          {label}
-        </span>
-      )}
-    </button>
-  );
-}
-
-function SectionTitle({
-  eyebrow,
-  title,
-  description,
-}) {
-  return (
-    <div>
-      {eyebrow && (
-        <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-cyan-600">
-          {eyebrow}
-        </p>
-      )}
-
-      <h2 className="mt-1 text-lg font-bold tracking-tight text-slate-900">
-        {title}
-      </h2>
-
-      {description && (
-        <p className="mt-1 text-xs leading-5 text-slate-400">
-          {description}
-        </p>
-      )}
-    </div>
-  );
-}
-
-function StatusBadge({ status }) {
-  const styles = {
-    ACTIVE:
-      "bg-emerald-50 text-emerald-700 border-emerald-100",
-    INACTIVE:
-      "bg-slate-100 text-slate-500 border-slate-200",
-  };
-
-  return (
-    <span
-      className={`inline-flex rounded-full border px-2.5 py-1 text-[10px] font-bold ${
-        styles[status] ||
-        "bg-slate-100 text-slate-600 border-slate-200"
-      }`}
-    >
-      {status || "—"}
-    </span>
-  );
-}
+const CALIBRATION_STEPS = [
+  "Select a classroom.",
+  "Upload the camera image.",
+  "Select a fan device.",
+  "Click and drag over the fan.",
+  "The rectangle appears live while you drag.",
+  "Save the calibration.",
+];
 
 export default function AdminCalibration() {
-  const [sidebarCollapsed, setSidebarCollapsed] =
-    useState(false);
-
   const [classrooms, setClassrooms] = useState([]);
   const [devices, setDevices] = useState([]);
 
@@ -166,11 +93,6 @@ export default function AdminCalibration() {
     useState(null);
 
   const imageRef = useRef(null);
-  const canvasRef = useRef(null);
-
-  const adminName =
-    localStorage.getItem("name") ||
-    "Administrator";
 
   /*
    * ---------------------------------------------------------
@@ -1118,37 +1040,20 @@ export default function AdminCalibration() {
 
   /*
    * ---------------------------------------------------------
-   * LOGOUT
+   * RELOAD REFERENCE DATA
    * ---------------------------------------------------------
    */
 
-  const handleLogout = () => {
-    localStorage.removeItem(
-      "access_token"
-    );
-
-    localStorage.removeItem(
-      "user_id"
-    );
-
-    localStorage.removeItem(
-      "name"
-    );
-
-    localStorage.removeItem(
-      "email"
-    );
-
-    localStorage.removeItem(
-      "role"
-    );
-
-    localStorage.removeItem(
-      "is_active"
-    );
-
-    window.location.href = "/";
+  const reloadReferenceData = () => {
+    loadClassrooms();
+    loadDevices();
   };
+
+  const selectedRoom = classrooms.find(
+    (room) =>
+      String(room.room_id) ===
+      String(selectedRoomId)
+  );
 
   /*
    * ---------------------------------------------------------
@@ -1157,946 +1062,575 @@ export default function AdminCalibration() {
    */
 
   return (
-    <div className="min-h-screen bg-slate-100 text-slate-900">
+    <AppShell
+      eyebrow="Infrastructure"
+      title="Calibration"
+      actions={
+        <RefreshButton
+          onClick={reloadReferenceData}
+          loading={loading}
+        />
+      }
+    >
+      <PageHeader
+        eyebrow="Camera configuration"
+        title="Fan vision calibration"
+        description="Select a classroom, upload its camera image, and draw the fan areas directly on the image. The coordinates are stored for the SIMMS vision runtime."
+      />
 
-      {/* ================================================= */}
-      {/* SIDEBAR */}
-      {/* ================================================= */}
-
-      <aside
-        className={`fixed inset-y-0 left-0 z-40 hidden flex-col bg-slate-950 transition-all duration-300 lg:flex ${
-          sidebarCollapsed
-            ? "w-[76px]"
-            : "w-64"
-        }`}
-      >
-
-        {/* BRAND */}
-
-        <div
-          className={`flex h-20 items-center border-b border-white/10 ${
-            sidebarCollapsed
-              ? "justify-center px-3"
-              : "justify-between px-5"
-          }`}
+      {error && (
+        <Alert
+          tone="danger"
+          title="Calibration error"
+          onDismiss={() => setError("")}
+          className="mb-6"
         >
+          {error}
+        </Alert>
+      )}
 
-          <div className="flex items-center gap-3">
+      {success && (
+        <Alert
+          tone="success"
+          title="Calibration updated"
+          onDismiss={() => setSuccess("")}
+          className="mb-6"
+        >
+          {success}
+        </Alert>
+      )}
 
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-cyan-400 text-lg font-black text-slate-950 shadow-lg shadow-cyan-400/20">
-              S
-            </div>
+      <section className="grid gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
+        {/* ================================================= */}
+        {/* CONTROL PANEL */}
+        {/* ================================================= */}
 
-            {!sidebarCollapsed && (
-              <div>
-                <p className="font-black tracking-[0.2em] text-white">
-                  SIMMS
-                </p>
-
-                <p className="text-[9px] uppercase tracking-[0.13em] text-slate-500">
-                  Admin Console
-                </p>
-              </div>
-            )}
-
-          </div>
-
-          {!sidebarCollapsed && (
-            <button
-              type="button"
-              onClick={() =>
-                setSidebarCollapsed(true)
-              }
-              className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 transition hover:bg-white/10 hover:text-white"
-              title="Collapse sidebar"
-            >
-              ‹
-            </button>
-          )}
-
-          {sidebarCollapsed && (
-            <button
-              type="button"
-              onClick={() =>
-                setSidebarCollapsed(false)
-              }
-              title="Expand sidebar"
-              className="absolute -right-3 top-6 flex h-7 w-7 items-center justify-center rounded-full border border-slate-700 bg-slate-900 text-sm font-bold text-cyan-300 shadow-lg"
-            >
-              ›
-            </button>
-          )}
-
-        </div>
-
-        {/* NAVIGATION */}
-
-        <div className="hide-scrollbar flex-1 overflow-y-auto px-3 py-7">
-
-          {!sidebarCollapsed && (
-            <p className="mb-3 px-3 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-600">
-              Main
-            </p>
-          )}
-
-          <nav className="space-y-1">
-
-            <NavigationItem
-              icon="▦"
-              label="Dashboard"
-              path="/admin/dashboard"
-              collapsed={
-                sidebarCollapsed
-              }
-            />
-
-            <NavigationItem
-              icon="▣"
-              label="Classrooms"
-              path="/admin/rooms"
-              collapsed={
-                sidebarCollapsed
-              }
-            />
-
-            <NavigationItem
-              icon="⌁"
-              label="Devices"
-              path="/admin/devices"
-              collapsed={
-                sidebarCollapsed
-              }
-            />
-
-            <NavigationItem
-              icon="◉"
-              label="Users"
-              path="/admin/users"
-              collapsed={
-                sidebarCollapsed
-              }
-            />
-
-          </nav>
-
-          {!sidebarCollapsed && (
-            <p className="mb-3 mt-9 px-3 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-600">
-              Management
-            </p>
-          )}
-
-          <nav className="space-y-1">
-
-            <NavigationItem
-              icon="⌘"
-              label="Calibration"
-              path="/admin/calibration"
-              active
-              collapsed={
-                sidebarCollapsed
-              }
-            />
-
-          </nav>
-
-          {!sidebarCollapsed && (
-            <div className="mt-8 rounded-2xl border border-cyan-400/10 bg-cyan-400/5 p-4">
-
-              <div className="flex items-center gap-2">
-
-                <span className="h-2 w-2 rounded-full bg-emerald-400" />
-
-                <span className="text-xs font-semibold text-slate-300">
-                  Monitoring active
-                </span>
-
-              </div>
-
-              <p className="mt-3 text-[11px] leading-5 text-slate-500">
-                SIMMS classroom infrastructure
-                monitoring is connected.
-              </p>
-
-            </div>
-          )}
-
-        </div>
-
-        {/* FOOTER */}
-
-        <div className="border-t border-white/10 p-3">
-
-          {!sidebarCollapsed && (
-            <div className="mb-3 rounded-xl bg-white/5 p-3">
-
-              <p className="truncate text-xs font-semibold text-white">
-                {adminName}
-              </p>
-
-              <p className="mt-1 text-[10px] text-slate-500">
-                Administrator
-              </p>
-
-            </div>
-          )}
-
-          <button
-            type="button"
-            onClick={handleLogout}
-            title={
-              sidebarCollapsed
-                ? "Logout"
-                : undefined
-            }
-            className={`flex w-full items-center rounded-xl text-sm font-semibold text-slate-400 transition hover:bg-red-500/10 hover:text-red-300 ${
-              sidebarCollapsed
-                ? "justify-center px-2 py-2.5"
-                : "gap-3 px-3 py-2.5"
-            }`}
-          >
-
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/5">
-              ↪
-            </span>
-
-            {!sidebarCollapsed && (
-              <span>Logout</span>
-            )}
-
-          </button>
-
-        </div>
-
-      </aside>
-
-      {/* ================================================= */}
-      {/* MAIN */}
-      {/* ================================================= */}
-
-      <div
-        className={`min-h-screen transition-all duration-300 ${
-          sidebarCollapsed
-            ? "lg:pl-[76px]"
-            : "lg:pl-64"
-        }`}
-      >
-
-        {/* TOP BAR */}
-
-        <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
-
-          <div className="flex h-20 items-center justify-between px-5 sm:px-8">
-
+        <Card
+          title="Calibration setup"
+          subtitle="Choose the classroom and fan devices to calibrate"
+          icon="settings"
+          className="self-start"
+        >
+          <div className="space-y-5">
+            {/* ROOM */}
             <div>
+              <label
+                htmlFor="calibration-room"
+                className="label"
+              >
+                Classroom{" "}
+                <span className="text-red-500">*</span>
+              </label>
 
-              <p className="text-xs font-semibold text-slate-400">
-                Administration
-              </p>
+              <select
+                id="calibration-room"
+                value={selectedRoomId}
+                onChange={handleRoomChange}
+                className="select"
+              >
+                <option value="">
+                  {loading
+                    ? "Loading classrooms…"
+                    : "Select classroom"}
+                </option>
 
-              <h1 className="text-lg font-bold text-slate-900">
-                Vision Calibration
-              </h1>
-
-            </div>
-
-            <div className="flex items-center gap-3">
-
-              <div className="hidden items-center gap-2 rounded-full border border-emerald-100 bg-emerald-50 px-3 py-2 sm:flex">
-
-                <span className="h-2 w-2 rounded-full bg-emerald-500" />
-
-                <span className="text-xs font-semibold text-emerald-700">
-                  System connected
-                </span>
-
-              </div>
-
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-cyan-50 text-sm font-bold text-cyan-700">
-                {adminName
-                  .charAt(0)
-                  .toUpperCase()}
-              </div>
-
-            </div>
-
-          </div>
-
-        </header>
-
-        {/* ================================================= */}
-        {/* CONTENT */}
-        {/* ================================================= */}
-
-        <main className="mx-auto w-full max-w-[1600px] px-5 py-8 sm:px-8">
-
-          {/* HEADER */}
-
-          <section className="mb-6 overflow-hidden rounded-3xl bg-slate-950 p-7 shadow-xl sm:p-9">
-
-            <div className="relative z-10">
-
-              <div className="inline-flex items-center gap-2 rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1.5">
-
-                <span className="h-1.5 w-1.5 rounded-full bg-cyan-300" />
-
-                <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-cyan-300">
-                  Camera configuration
-                </span>
-
-              </div>
-
-              <h2 className="mt-4 text-3xl font-black tracking-tight text-white sm:text-4xl">
-                Fan Vision Calibration
-              </h2>
-
-              <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-400">
-                Select a classroom, upload its camera
-                image, and draw the fan areas directly
-                on the image. The coordinates are stored
-                for the SIMMS vision runtime.
-              </p>
-
-            </div>
-
-          </section>
-
-          {/* ERROR */}
-
-          {error && (
-            <div className="mb-5 rounded-2xl border border-red-200 bg-red-50 p-4">
-
-              <p className="text-sm font-bold text-red-800">
-                Calibration error
-              </p>
-
-              <p className="mt-1 text-xs text-red-600">
-                {error}
-              </p>
-
-            </div>
-          )}
-
-          {/* SUCCESS */}
-
-          {success && (
-            <div className="mb-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
-
-              <p className="text-sm font-bold text-emerald-800">
-                Calibration updated
-              </p>
-
-              <p className="mt-1 text-xs text-emerald-600">
-                {success}
-              </p>
-
-            </div>
-          )}
-
-          <section className="grid gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
-
-            {/* ================================================= */}
-            {/* LEFT CONTROL PANEL */}
-            {/* ================================================= */}
-
-            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-
-              <SectionTitle
-                eyebrow="Configuration"
-                title="Calibration setup"
-                description="Choose the classroom and fan devices to calibrate."
-              />
-
-              {/* ROOM */}
-
-              <div className="mt-6">
-
-                <label className="mb-2 block text-xs font-bold text-slate-600">
-                  Classroom
-                </label>
-
-                <select
-                  value={selectedRoomId}
-                  onChange={handleRoomChange}
-                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm font-semibold text-slate-700 outline-none transition focus:border-cyan-400 focus:ring-4 focus:ring-cyan-50"
-                >
-
-                  <option value="">
-                    Select classroom
+                {classrooms.map((room) => (
+                  <option
+                    key={room.room_id}
+                    value={room.room_id}
+                  >
+                    {room.room_name ||
+                      `Room ${room.room_id}`}
                   </option>
+                ))}
+              </select>
+            </div>
 
-                  {classrooms.map(
-                    (room) => (
-                      <option
-                        key={
-                          room.room_id
-                        }
-                        value={
-                          room.room_id
-                        }
-                      >
-                        {room.room_name ||
-                          `Room ${room.room_id}`}
-                      </option>
-                    )
-                  )}
+            {/* IMAGE */}
+            <div>
+              <label
+                htmlFor="calibration-image"
+                className="label"
+              >
+                Classroom image{" "}
+                <span className="text-red-500">*</span>
+              </label>
 
-                </select>
-
-              </div>
-
-              {/* IMAGE */}
-
-              <div className="mt-5">
-
-                <label className="mb-2 block text-xs font-bold text-slate-600">
-                  Classroom image
-                </label>
-
-                <label className="flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-200 bg-slate-50 px-4 py-7 text-center transition hover:border-cyan-300 hover:bg-cyan-50/40">
-
-                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white text-lg shadow-sm">
-                    ↑
-                  </div>
-
-                  <p className="mt-3 text-xs font-bold text-slate-700">
-                    Upload camera image
-                  </p>
-
-                  <p className="mt-1 text-[10px] text-slate-400">
-                    PNG, JPG or JPEG
-                  </p>
-
-                  <input
-                    type="file"
-                    accept="image/png,image/jpeg,image/jpg"
-                    onChange={
-                      handleImageUpload
-                    }
-                    className="hidden"
+              <label className="group flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-slate-50/70 px-4 py-6 text-center transition-colors duration-150 focus-within:border-brand-400 focus-within:ring-2 focus-within:ring-brand-200 hover:border-brand-300 hover:bg-brand-50/40">
+                <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-white text-slate-500 shadow-card ring-1 ring-slate-200 group-hover:text-brand-600">
+                  <Icon
+                    name="image"
+                    className="h-5 w-5"
                   />
+                </span>
 
-                </label>
+                <span className="mt-3 text-sm font-semibold text-slate-800">
+                  {imageFile
+                    ? "Replace camera image"
+                    : "Upload camera image"}
+                </span>
 
-                {imageFile && (
-                  <p className="mt-2 truncate text-[10px] text-slate-400">
+                <span className="mt-0.5 text-xs text-slate-500">
+                  PNG, JPG or JPEG
+                </span>
+
+                <input
+                  id="calibration-image"
+                  type="file"
+                  accept="image/png,image/jpeg,image/jpg"
+                  onChange={
+                    handleImageUpload
+                  }
+                  className="sr-only"
+                />
+              </label>
+
+              {imageFile && (
+                <p className="help-text flex items-center gap-1.5 truncate">
+                  <Icon
+                    name="image"
+                    className="h-3.5 w-3.5 shrink-0"
+                  />
+                  <span className="truncate">
                     {imageFile.name}
-                  </p>
-                )}
+                  </span>
+                </p>
+              )}
+            </div>
 
-              </div>
+            {/* FAN DEVICE */}
+            <div>
+              <label
+                htmlFor="calibration-fan"
+                className="label"
+              >
+                Fan device
+              </label>
 
-              {/* FAN DEVICE */}
+              <select
+                id="calibration-fan"
+                value={selectedDeviceId}
+                onChange={(event) =>
+                  setSelectedDeviceId(
+                    event.target.value
+                  )
+                }
+                disabled={!selectedRoomId}
+                className="select"
+              >
+                <option value="">
+                  Select fan
+                </option>
 
-              <div className="mt-5">
-
-                <label className="mb-2 block text-xs font-bold text-slate-600">
-                  Fan device
-                </label>
-
-                <select
-                  value={selectedDeviceId}
-                  onChange={(event) =>
-                    setSelectedDeviceId(
-                      event.target.value
-                    )
-                  }
-                  disabled={
-                    !selectedRoomId
-                  }
-                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm font-semibold text-slate-700 outline-none transition focus:border-cyan-400 focus:ring-4 focus:ring-cyan-50 disabled:bg-slate-50 disabled:text-slate-400"
-                >
-
-                  <option value="">
-                    Select fan
+                {fanDevices.map((device) => (
+                  <option
+                    key={device.device_id}
+                    value={device.device_id}
+                  >
+                    {device.device_name}
                   </option>
+                ))}
+              </select>
 
-                  {fanDevices.map(
-                    (device) => (
-                      <option
-                        key={
-                          device.device_id
-                        }
-                        value={
-                          device.device_id
-                        }
-                      >
-                        {device.device_name}
-                      </option>
-                    )
-                  )}
+              {selectedRoomId &&
+              fanDevices.length === 0 ? (
+                <p className="mt-1.5 flex items-start gap-1.5 text-xs text-amber-700">
+                  <Icon
+                    name="alert"
+                    className="mt-px h-3.5 w-3.5 shrink-0"
+                  />
+                  No active fan devices are
+                  registered for this classroom.
+                </p>
+              ) : (
+                <p className="help-text">
+                  The selected fan is assigned to
+                  the next area you draw.
+                </p>
+              )}
+            </div>
 
-                </select>
+            {/* INSTRUCTIONS */}
+            <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-4">
+              <p className="flex items-center gap-2 text-[13px] font-semibold text-slate-800">
+                <Icon
+                  name="info"
+                  className="h-4 w-4 text-brand-600"
+                />
+                How to calibrate
+              </p>
 
-                {selectedRoomId &&
-                  fanDevices.length ===
-                    0 && (
-                    <p className="mt-2 text-[10px] text-amber-600">
-                      No active fan devices are
-                      registered for this classroom.
-                    </p>
-                  )}
+              <ol className="mt-3 space-y-2">
+                {CALIBRATION_STEPS.map(
+                  (step, index) => (
+                    <li
+                      key={step}
+                      className="flex items-start gap-2.5 text-xs leading-5 text-slate-600"
+                    >
+                      <span className="num flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white text-[11px] font-semibold text-brand-700 ring-1 ring-brand-200">
+                        {index + 1}
+                      </span>
+                      {step}
+                    </li>
+                  )
+                )}
+              </ol>
+            </div>
 
-              </div>
-
-              {/* INSTRUCTIONS */}
-
-              <div className="mt-6 rounded-xl border border-cyan-100 bg-cyan-50 p-4">
-
-                <p className="text-xs font-bold text-cyan-800">
-                  How to calibrate
+            {/* CURRENT BOXES */}
+            <div>
+              <div className="mb-2 flex items-center justify-between">
+                <p className="eyebrow">
+                  Fan areas
                 </p>
 
-                <ol className="mt-2 space-y-2 text-[11px] leading-5 text-cyan-700">
-
-                  <li>
-                    1. Select a classroom.
-                  </li>
-
-                  <li>
-                    2. Upload the camera image.
-                  </li>
-
-                  <li>
-                    3. Select a fan device.
-                  </li>
-
-                  <li>
-                    4. Click and drag over the fan.
-                  </li>
-
-                  <li>
-                    5. The rectangle appears live while
-                    you drag.
-                  </li>
-
-                  <li>
-                    6. Save the calibration.
-                  </li>
-
-                </ol>
-
+                <span className="num rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
+                  {fanBoxes.length}
+                </span>
               </div>
 
-              {/* CURRENT BOXES */}
-
-              <div className="mt-6">
-
-                <div className="mb-3 flex items-center justify-between">
-
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                    Fan areas
+              {fanBoxes.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-slate-200 px-4 py-5 text-center">
+                  <p className="text-[13px] font-medium text-slate-500">
+                    No fan areas drawn
                   </p>
-
-                  <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-500">
-                    {fanBoxes.length}
-                  </span>
-
-                </div>
-
-                <div className="space-y-2">
-
-                  {fanBoxes.length ===
-                    0 ? (
-                    <div className="rounded-xl border border-dashed border-slate-200 px-4 py-5 text-center">
-
-                      <p className="text-xs font-semibold text-slate-500">
-                        No fan areas drawn
-                      </p>
-
-                    </div>
-                  ) : (
-                    fanBoxes.map(
-                      (box) => (
-                        <div
-                          key={
-                            box.device_id
-                          }
-                          className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 p-3"
-                        >
-
-                          <div>
-
-                            <p className="text-xs font-bold text-slate-700">
-                              {getDeviceName(
-                                box.device_id
-                              )}
-                            </p>
-
-                            <p className="mt-1 text-[9px] text-slate-400">
-                              ({box.x1},{" "}
-                              {box.y1}) → (
-                              {box.x2},{" "}
-                              {box.y2})
-                            </p>
-
-                          </div>
-
-                          <button
-                            type="button"
-                            onClick={() =>
-                              removeFanBox(
-                                box.device_id
-                              )
-                            }
-                            className="rounded-lg px-2 py-1.5 text-[10px] font-bold text-red-500 hover:bg-red-50"
-                          >
-                            Remove
-                          </button>
-
-                        </div>
-                      )
-                    )
-                  )}
-
-                </div>
-
-              </div>
-
-              {/* SAVE */}
-
-              <button
-                type="button"
-                onClick={
-                  saveCalibration
-                }
-                disabled={
-                  saving ||
-                  !selectedRoomId ||
-                  fanBoxes.length ===
-                    0
-                }
-                className="mt-6 w-full rounded-xl bg-cyan-600 px-4 py-3 text-sm font-bold text-white shadow-lg shadow-cyan-600/20 transition hover:bg-cyan-700 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {saving
-                  ? "Saving calibration..."
-                  : "Save calibration"}
-              </button>
-
-            </div>
-
-            {/* ================================================= */}
-            {/* RIGHT IMAGE AREA */}
-            {/* ================================================= */}
-
-            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-
-              <div className="mb-5 flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
-
-                <SectionTitle
-                  eyebrow="Interactive canvas"
-                  title="Fan detection areas"
-                  description="Draw rectangles directly over the fans."
-                />
-
-                {loadingCalibration && (
-                  <span className="rounded-full bg-slate-100 px-3 py-2 text-[10px] font-bold text-slate-500">
-                    Loading calibration...
-                  </span>
-                )}
-
-              </div>
-
-              {!imageUrl ? (
-                <div className="flex min-h-[560px] items-center justify-center rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50">
-
-                  <div className="max-w-sm text-center">
-
-                    <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-white text-2xl shadow-sm">
-                      ▧
-                    </div>
-
-                    <p className="mt-5 text-sm font-bold text-slate-700">
-                      No classroom image selected
-                    </p>
-
-                    <p className="mt-2 text-xs leading-5 text-slate-400">
-                      Select a classroom and upload its
-                      camera image to begin fan calibration.
-                    </p>
-
-                  </div>
-
                 </div>
               ) : (
-                <div className="rounded-2xl border border-slate-200 bg-slate-950 p-3">
+                <ul className="divide-y divide-slate-100 overflow-hidden rounded-lg border border-slate-200">
+                  {fanBoxes.map((box) => (
+                    <li
+                      key={box.device_id}
+                      className="flex items-center gap-3 px-3 py-2.5"
+                    >
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-600">
+                        <Icon
+                          name="fan"
+                          className="h-4 w-4"
+                        />
+                      </span>
 
-                  {/* IMAGE CANVAS */}
-
-                  <div
-                    className="relative mx-auto w-full max-w-[1100px] select-none overflow-hidden rounded-xl"
-                    onMouseDown={
-                      handleMouseDown
-                    }
-                    onMouseMove={
-                      handleMouseMove
-                    }
-                    onMouseUp={
-                      handleMouseUp
-                    }
-                    onMouseLeave={
-                      handleMouseLeave
-                    }
-                    onTouchStart={
-                      handleTouchStart
-                    }
-                    onTouchMove={
-                      handleTouchMove
-                    }
-                    onTouchEnd={
-                      handleTouchEnd
-                    }
-                    style={{
-                      cursor:
-                        selectedDeviceId
-                          ? "crosshair"
-                          : "default",
-                      touchAction:
-                        "none",
-                    }}
-                  >
-
-                    <img
-                      ref={imageRef}
-                      src={imageUrl}
-                      alt="Classroom calibration"
-                      draggable={false}
-                      className="block h-auto w-full"
-                      onLoad={() =>
-                        setCurrentBox(
-                          null
-                        )
-                      }
-                    />
-
-                    {/* SAVED FAN BOXES */}
-
-                    {fanBoxes.map(
-                      (box) => (
-                        <div
-                          key={
-                            `saved-${box.device_id}`
-                          }
-                          className="pointer-events-none absolute border-2 border-cyan-400 bg-cyan-400/10 shadow-[0_0_0_1px_rgba(0,0,0,0.15)]"
-                          style={getDisplayBoxStyle(
-                            box
-                          )}
-                        >
-
-                          <div className="absolute -top-7 left-0 whitespace-nowrap rounded-md bg-cyan-500 px-2 py-1 text-[9px] font-bold text-white shadow-md">
-                            {getDeviceName(
-                              box.device_id
-                            )}
-                          </div>
-
-                        </div>
-                      )
-                    )}
-
-                    {/* LIVE DRAWING BOX */}
-
-                    {currentBox && (
-                      <div
-                        className="pointer-events-none absolute border-2 border-amber-400 bg-amber-400/20"
-                        style={getDisplayBoxStyle(
-                          currentBox
-                        )}
-                      >
-
-                        <div className="absolute -top-7 left-0 whitespace-nowrap rounded-md bg-amber-500 px-2 py-1 text-[9px] font-bold text-white shadow-md">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-[13px] font-semibold text-slate-900">
                           {getDeviceName(
-                            currentBox.device_id
-                          )}{" "}
-                          · drawing
-                        </div>
+                            box.device_id
+                          )}
+                        </p>
 
+                        <p className="num mt-0.5 flex items-center gap-1 text-[11px] text-slate-500">
+                          ({box.x1}, {box.y1})
+                          <Icon
+                            name="arrowRight"
+                            className="h-3 w-3"
+                          />
+                          ({box.x2}, {box.y2})
+                        </p>
                       </div>
-                    )}
 
-                  </div>
-
-                </div>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          removeFanBox(
+                            box.device_id
+                          )
+                        }
+                        className="btn btn-sm btn-danger-soft"
+                        aria-label={`Remove area for ${getDeviceName(
+                          box.device_id
+                        )}`}
+                      >
+                        <Icon
+                          name="trash"
+                          className="h-3.5 w-3.5"
+                        />
+                        <span className="hidden sm:inline">
+                          Remove
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
               )}
-
-              {/* CANVAS STATUS */}
-
-              {imageUrl && (
-                <div className="mt-5 grid gap-3 sm:grid-cols-3">
-
-                  <div className="rounded-xl bg-slate-50 p-4">
-
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                      Fans calibrated
-                    </p>
-
-                    <p className="mt-1 text-xl font-black text-slate-800">
-                      {fanBoxes.length}
-                    </p>
-
-                  </div>
-
-                  <div className="rounded-xl bg-cyan-50 p-4">
-
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-cyan-600">
-                      Canvas mode
-                    </p>
-
-                    <p className="mt-1 text-sm font-black text-cyan-700">
-                      {selectedDeviceId
-                        ? "Ready to draw"
-                        : "Select fan"}
-                    </p>
-
-                  </div>
-
-                  <div className="rounded-xl bg-emerald-50 p-4">
-
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-600">
-                      Calibration
-                    </p>
-
-                    <p className="mt-1 text-sm font-black text-emerald-700">
-                      {activeCalibration
-                        ? `v${activeCalibration.calibration_version}`
-                        : "New"}
-                    </p>
-
-                  </div>
-
-                </div>
-              )}
-
-              {/* COORDINATE INFO */}
-
-              {currentBox && (
-                <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4">
-
-                  <p className="text-xs font-bold text-amber-800">
-                    Drawing fan area
-                  </p>
-
-                  <p className="mt-1 text-[11px] text-amber-700">
-                    X: {currentBox.x1} →{" "}
-                    {currentBox.x2}
-                    {" · "}
-                    Y: {currentBox.y1} →{" "}
-                    {currentBox.y2}
-                  </p>
-
-                </div>
-              )}
-
             </div>
 
-          </section>
+            {/* SAVE */}
+            <button
+              type="button"
+              onClick={saveCalibration}
+              disabled={
+                saving ||
+                !selectedRoomId ||
+                fanBoxes.length === 0
+              }
+              className="btn btn-primary w-full"
+            >
+              {saving ? (
+                <>
+                  <Spinner />
+                  Saving…
+                </>
+              ) : (
+                <>
+                  <Icon
+                    name="save"
+                    className="h-4 w-4"
+                  />
+                  Save calibration
+                </>
+              )}
+            </button>
+          </div>
+        </Card>
 
-          {/* ================================================= */}
-          {/* ACTIVE CALIBRATION */}
-          {/* ================================================= */}
+        {/* ================================================= */}
+        {/* IMAGE AREA */}
+        {/* ================================================= */}
 
-          {activeCalibration && (
-            <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-
-              <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
-
-                <SectionTitle
-                  eyebrow="Backend record"
-                  title="Active calibration"
-                  description="This calibration is currently active for the selected classroom."
+        <Card
+          title="Fan detection areas"
+          subtitle="Draw rectangles directly over the fans"
+          icon="crosshair"
+          actions={
+            loadingCalibration ? (
+              <span className="inline-flex items-center gap-1.5 rounded-md bg-slate-100 px-2 py-1 text-[11.5px] font-medium text-slate-600">
+                <Spinner className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">
+                  Loading calibration…
+                </span>
+              </span>
+            ) : selectedRoom ? (
+              <span className="hidden truncate text-xs font-medium text-slate-500 sm:inline">
+                {selectedRoom.room_name ||
+                  `Room ${selectedRoom.room_id}`}
+              </span>
+            ) : null
+          }
+        >
+          {!imageUrl ? (
+            <div className="flex min-h-[420px] items-center justify-center rounded-xl border border-dashed border-slate-300 bg-slate-50/70">
+              <EmptyState
+                icon="image"
+                title="No classroom image selected"
+                description="Select a classroom and upload its camera image to begin fan calibration."
+              />
+            </div>
+          ) : (
+            <div className="rounded-xl bg-ink-950 p-2 sm:p-3">
+              {/* IMAGE CANVAS */}
+              <div
+                className="relative mx-auto w-full max-w-[1100px] select-none overflow-hidden rounded-lg"
+                onMouseDown={
+                  handleMouseDown
+                }
+                onMouseMove={
+                  handleMouseMove
+                }
+                onMouseUp={
+                  handleMouseUp
+                }
+                onMouseLeave={
+                  handleMouseLeave
+                }
+                onTouchStart={
+                  handleTouchStart
+                }
+                onTouchMove={
+                  handleTouchMove
+                }
+                onTouchEnd={
+                  handleTouchEnd
+                }
+                style={{
+                  cursor:
+                    selectedDeviceId
+                      ? "crosshair"
+                      : "default",
+                  touchAction:
+                    "none",
+                }}
+              >
+                <img
+                  ref={imageRef}
+                  src={imageUrl}
+                  alt="Classroom calibration"
+                  draggable={false}
+                  className="block h-auto w-full"
+                  onLoad={() =>
+                    setCurrentBox(
+                      null
+                    )
+                  }
                 />
 
-                <StatusBadge status="ACTIVE" />
-
-              </div>
-
-              <div className="mt-5 grid gap-3 sm:grid-cols-4">
-
-                <div className="rounded-xl bg-slate-50 p-4">
-
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                    Version
-                  </p>
-
-                  <p className="mt-1 text-lg font-black text-slate-800">
-                    v
-                    {
-                      activeCalibration.calibration_version
-                    }
-                  </p>
-
-                </div>
-
-                <div className="rounded-xl bg-slate-50 p-4">
-
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                    Room
-                  </p>
-
-                  <p className="mt-1 text-lg font-black text-slate-800">
-                    {
-                      activeCalibration.room_id
-                    }
-                  </p>
-
-                </div>
-
-                <div className="rounded-xl bg-slate-50 p-4">
-
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                    Fan areas
-                  </p>
-
-                  <p className="mt-1 text-lg font-black text-slate-800">
-                    {
-                      activeCalibration
-                        .calibration_data
-                        ?.fans?.length ||
-                      0
-                    }
-                  </p>
-
-                </div>
-
-                <div className="rounded-xl bg-slate-50 p-4">
-
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                    Created
-                  </p>
-
-                  <p className="mt-1 text-xs font-bold text-slate-700">
-                    {formatDate(
-                      activeCalibration.created_at
+                {/* SAVED FAN BOXES */}
+                {fanBoxes.map((box) => (
+                  <div
+                    key={`saved-${box.device_id}`}
+                    className="pointer-events-none absolute border-2 border-brand-400 bg-brand-400/15 shadow-[0_0_0_1px_rgba(0,0,0,0.25)]"
+                    style={getDisplayBoxStyle(
+                      box
                     )}
-                  </p>
+                  >
+                    <div className="absolute -top-7 left-0 whitespace-nowrap rounded-md bg-brand-600 px-2 py-1 text-[10.5px] font-semibold text-white shadow-raised">
+                      {getDeviceName(
+                        box.device_id
+                      )}
+                    </div>
+                  </div>
+                ))}
 
-                </div>
-
+                {/* LIVE DRAWING BOX */}
+                {currentBox && (
+                  <div
+                    className="pointer-events-none absolute border-2 border-dashed border-amber-400 bg-amber-400/20"
+                    style={getDisplayBoxStyle(
+                      currentBox
+                    )}
+                  >
+                    <div className="absolute -top-7 left-0 whitespace-nowrap rounded-md bg-amber-500 px-2 py-1 text-[10.5px] font-semibold text-ink-950 shadow-raised">
+                      {getDeviceName(
+                        currentBox.device_id
+                      )}{" "}
+                      · drawing
+                    </div>
+                  </div>
+                )}
               </div>
-
-            </section>
+            </div>
           )}
 
-          {/* FOOTER */}
+          {/* CANVAS STATUS */}
+          {imageUrl && (
+            <dl className="mt-4 grid gap-3 sm:grid-cols-3">
+              <div className="rounded-lg border border-slate-200 bg-slate-50/70 px-4 py-3">
+                <dt className="text-xs font-medium text-slate-500">
+                  Fans calibrated
+                </dt>
+                <dd className="num mt-1 text-xl font-semibold text-slate-900">
+                  {fanBoxes.length}
+                </dd>
+              </div>
 
-          <footer className="mt-8 border-t border-slate-200 py-6">
+              <div className="rounded-lg border border-slate-200 bg-slate-50/70 px-4 py-3">
+                <dt className="text-xs font-medium text-slate-500">
+                  Canvas mode
+                </dt>
+                <dd className="mt-1.5">
+                  {selectedDeviceId ? (
+                    <StatusBadge
+                      tone="brand"
+                      label="Ready to draw"
+                    />
+                  ) : (
+                    <StatusBadge
+                      tone="neutral"
+                      label="Select fan"
+                    />
+                  )}
+                </dd>
+              </div>
 
-            <div className="flex flex-col justify-between gap-2 text-[10px] text-slate-400 sm:flex-row">
+              <div className="rounded-lg border border-slate-200 bg-slate-50/70 px-4 py-3">
+                <dt className="text-xs font-medium text-slate-500">
+                  Calibration
+                </dt>
+                <dd className="mt-1.5">
+                  {activeCalibration ? (
+                    <StatusBadge
+                      tone="success"
+                      label={`v${activeCalibration.calibration_version}`}
+                    />
+                  ) : (
+                    <StatusBadge
+                      tone="info"
+                      label="New"
+                    />
+                  )}
+                </dd>
+              </div>
+            </dl>
+          )}
 
-              <p>
-                SIMMS · Smart Classroom Infrastructure
-                Monitoring System
-              </p>
+          {/* COORDINATE INFO */}
+          {currentBox && (
+            <div
+              className="mt-4 flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3"
+              aria-live="polite"
+            >
+              <Icon
+                name="target"
+                className="mt-0.5 h-4 w-4 shrink-0 text-amber-600"
+              />
+              <div className="min-w-0">
+                <p className="text-[13px] font-semibold text-amber-900">
+                  Drawing fan area
+                </p>
 
-              <p>
-                Administration Console · v1.0
-              </p>
-
+                <p className="num mt-0.5 flex flex-wrap items-center gap-x-1 text-xs text-amber-800">
+                  <span>X: {currentBox.x1}</span>
+                  <Icon
+                    name="arrowRight"
+                    className="h-3 w-3"
+                  />
+                  <span>{currentBox.x2}</span>
+                  <span
+                    aria-hidden="true"
+                    className="px-1"
+                  >
+                    ·
+                  </span>
+                  <span>Y: {currentBox.y1}</span>
+                  <Icon
+                    name="arrowRight"
+                    className="h-3 w-3"
+                  />
+                  <span>{currentBox.y2}</span>
+                </p>
+              </div>
             </div>
+          )}
+        </Card>
+      </section>
 
-          </footer>
+      {/* ================================================= */}
+      {/* ACTIVE CALIBRATION */}
+      {/* ================================================= */}
 
-        </main>
+      {activeCalibration && (
+        <Card
+          className="mt-6"
+          title="Active calibration"
+          subtitle="This calibration is currently active for the selected classroom"
+          icon="calibration"
+          actions={
+            <StatusBadge status="ACTIVE" />
+          }
+        >
+          <dl className="grid gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-4">
+            <DetailItem label="Version" mono>
+              v
+              {
+                activeCalibration.calibration_version
+              }
+            </DetailItem>
 
-      </div>
-    </div>
+            <DetailItem label="Room" mono>
+              {activeCalibration.room_id}
+            </DetailItem>
+
+            <DetailItem label="Fan areas" mono>
+              {activeCalibration
+                .calibration_data
+                ?.fans?.length || 0}
+            </DetailItem>
+
+            <DetailItem label="Created" mono>
+              {formatDate(
+                activeCalibration.created_at
+              )}
+            </DetailItem>
+          </dl>
+        </Card>
+      )}
+    </AppShell>
   );
 }

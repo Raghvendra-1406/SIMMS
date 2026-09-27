@@ -1,4 +1,17 @@
 import { useEffect, useState } from "react";
+import AppShell from "../../components/AppShell";
+import Icon from "../../components/Icon";
+import {
+  Alert,
+  Card,
+  DetailItem,
+  EmptyState,
+  IconTile,
+  RefreshButton,
+  StatusBadge,
+} from "../../components/ui";
+import { formatLabel } from "../../lib/format";
+import { navigateTo } from "../../lib/session";
 
 const API_BASE_URL = "http://localhost:8000";
 
@@ -13,10 +26,6 @@ function getAuthHeaders() {
   };
 }
 
-function navigateTo(path) {
-  window.location.href = path;
-}
-
 function formatDateTime(value) {
   if (!value) {
     return "—";
@@ -29,49 +38,6 @@ function formatDateTime(value) {
   }
 
   return date.toLocaleString();
-}
-
-function getStatusClass(status) {
-  switch (
-    String(status || "").toUpperCase()
-  ) {
-    case "OPEN":
-      return "border-red-200 bg-red-50 text-red-700";
-
-    case "REOPENED":
-      return "border-orange-200 bg-orange-50 text-orange-700";
-
-    case "IN_PROGRESS":
-      return "border-blue-200 bg-blue-50 text-blue-700";
-
-    case "RESOLVED":
-      return "border-emerald-200 bg-emerald-50 text-emerald-700";
-
-    case "CLOSED":
-      return "border-slate-200 bg-slate-100 text-slate-600";
-
-    default:
-      return "border-slate-200 bg-slate-50 text-slate-600";
-  }
-}
-
-function getPriorityClass(priority) {
-  switch (
-    String(priority || "").toUpperCase()
-  ) {
-    case "URGENT":
-    case "HIGH":
-      return "border-red-200 bg-red-50 text-red-700";
-
-    case "MEDIUM":
-      return "border-amber-200 bg-amber-50 text-amber-700";
-
-    case "LOW":
-      return "border-emerald-200 bg-emerald-50 text-emerald-700";
-
-    default:
-      return "border-slate-200 bg-slate-50 text-slate-600";
-  }
 }
 
 function getFaultTypeLabel(faultType) {
@@ -103,79 +69,49 @@ function getHistoryActionLabel(action) {
     );
 }
 
-function InfoItem({
-  label,
-  value,
-  valueClass = "text-slate-800",
-}) {
+function DetailsSkeleton() {
   return (
-    <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-4">
-      <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">
-        {label}
-      </p>
-
-      <p
-        className={`mt-2 break-words text-sm font-bold ${valueClass}`}
-      >
-        {value}
-      </p>
+    <div aria-busy="true" aria-live="polite">
+      <span className="sr-only">Loading ticket details…</span>
+      <div className="card p-5">
+        <div className="flex items-start gap-4">
+          <span className="skeleton h-11 w-11 rounded-xl" />
+          <div className="flex-1 space-y-3">
+            <span className="skeleton block h-5 w-40" />
+            <span className="skeleton block h-3 w-64" />
+          </div>
+        </div>
+      </div>
+      <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+        <div className="space-y-6">
+          {Array.from({ length: 2 }).map((_, index) => (
+            <div key={index} className="card p-5">
+              <span className="skeleton block h-4 w-32" />
+              <div className="mt-5 grid gap-4 sm:grid-cols-2">
+                {Array.from({ length: 4 }).map((__, cell) => (
+                  <div key={cell} className="space-y-2">
+                    <span className="skeleton block h-3 w-20" />
+                    <span className="skeleton block h-4 w-32" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="card p-5">
+          <span className="skeleton block h-4 w-28" />
+          <div className="mt-5 space-y-4">
+            {Array.from({ length: 4 }).map((_, index) => (
+              <span key={index} className="skeleton block h-12 w-full" />
+            ))}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
 
-function NavigationItem({
-  icon,
-  label,
-  path,
-  active,
-  collapsed,
-}) {
-  return (
-    <button
-      type="button"
-      onClick={() => navigateTo(path)}
-      title={
-        collapsed ? label : undefined
-      }
-      className={`group flex w-full items-center rounded-xl text-left text-sm font-semibold transition ${
-        collapsed
-          ? "justify-center px-2 py-2.5"
-          : "gap-3 px-3 py-2.5"
-      } ${
-        active
-          ? "bg-cyan-500 text-white shadow-md shadow-cyan-500/20"
-          : "text-slate-400 hover:bg-white/5 hover:text-white"
-      }`}
-    >
-      <span
-        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-sm ${
-          active
-            ? "bg-white/15 text-white"
-            : "bg-white/5 text-slate-400 group-hover:text-cyan-300"
-        }`}
-      >
-        {icon}
-      </span>
-
-      {!collapsed && (
-        <span className="truncate">
-          {label}
-        </span>
-      )}
-    </button>
-  );
-}
-
 export default function SupervisorTicketDetails() {
-  const [sidebarCollapsed, setSidebarCollapsed] =
-    useState(false);
-
-  const [supervisorName, setSupervisorName] =
-    useState("Supervisor");
-
-  const [supervisorEmail, setSupervisorEmail] =
-    useState("");
-
   const [ticket, setTicket] =
     useState(null);
 
@@ -196,22 +132,6 @@ export default function SupervisorTicketDetails() {
 
   const ticketId =
     window.location.pathname.split("/").pop();
-
-  useEffect(() => {
-    const storedName =
-      localStorage.getItem("name");
-
-    const storedEmail =
-      localStorage.getItem("email");
-
-    if (storedName) {
-      setSupervisorName(storedName);
-    }
-
-    if (storedEmail) {
-      setSupervisorEmail(storedEmail);
-    }
-  }, []);
 
   useEffect(() => {
     if (ticketId) {
@@ -380,779 +300,337 @@ export default function SupervisorTicketDetails() {
     }
   }
 
-  function handleLogout() {
-    localStorage.removeItem(
-      "access_token"
-    );
-    localStorage.removeItem(
-      "token_type"
-    );
-    localStorage.removeItem("user_id");
-    localStorage.removeItem("name");
-    localStorage.removeItem("email");
-    localStorage.removeItem("role");
-    localStorage.removeItem("is_active");
-
-    window.location.href = "/";
-  }
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-slate-50">
-        <div className="flex min-h-screen items-center justify-center">
-          <div className="text-center">
-            <div className="mx-auto h-9 w-9 animate-spin rounded-full border-4 border-slate-200 border-t-cyan-500" />
-
-            <p className="mt-4 text-sm font-semibold text-slate-500">
-              Loading ticket details...
-            </p>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const lifecycle = ticket
+    ? [
+        { key: "created", label: "Created", value: ticket.created_at, icon: "plus" },
+        { key: "resolved", label: "Resolved", value: ticket.resolved_at, icon: "checkCircle" },
+        { key: "closed", label: "Closed", value: ticket.closed_at, icon: "lock" },
+      ]
+    : [];
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900">
-      {/* Sidebar */}
-      <aside
-        className={`fixed inset-y-0 left-0 z-40 hidden flex-col bg-slate-950 transition-all duration-300 lg:flex ${
-          sidebarCollapsed
-            ? "w-[76px]"
-            : "w-64"
-        }`}
-      >
-        <div
-          className={`flex h-20 items-center border-b border-white/10 ${
-            sidebarCollapsed
-              ? "justify-center px-3"
-              : "justify-between px-5"
-          }`}
-        >
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-cyan-400 text-lg font-black text-slate-950 shadow-lg shadow-cyan-400/20">
-              S
-            </div>
+    <AppShell
+      eyebrow="Tickets"
+      title={ticket ? `Ticket #${ticket.ticket_id}` : "Ticket details"}
+      backHref="/supervisor/tickets"
+      actions={<RefreshButton onClick={loadTicketDetails} loading={loading} />}
+    >
+      {loading ? (
+        <DetailsSkeleton />
+      ) : error ? (
+        <Alert tone="danger" title="Unable to load ticket" onRetry={loadTicketDetails}>
+          {error}
+        </Alert>
+      ) : ticket ? (
+        <>
+          {/* Summary header */}
+          <section className="card p-5 sm:p-6">
+            <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+              <div className="flex min-w-0 items-start gap-4">
+                <IconTile icon="ticket" tone="brand" className="h-11 w-11" />
 
-            {!sidebarCollapsed && (
-              <div>
-                <p className="font-black tracking-[0.2em] text-white">
-                  SIMMS
-                </p>
-
-                <p className="text-[9px] uppercase tracking-[0.13em] text-slate-500">
-                  Supervisor Console
-                </p>
-              </div>
-            )}
-          </div>
-
-          {!sidebarCollapsed && (
-            <button
-              type="button"
-              onClick={() =>
-                setSidebarCollapsed(true)
-              }
-              title="Collapse sidebar"
-              className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 transition hover:bg-white/10 hover:text-white"
-            >
-              ‹
-            </button>
-          )}
-
-          {sidebarCollapsed && (
-            <button
-              type="button"
-              onClick={() =>
-                setSidebarCollapsed(false)
-              }
-              title="Expand sidebar"
-              className="absolute -right-3 top-6 flex h-7 w-7 items-center justify-center rounded-full border border-slate-700 bg-slate-900 text-sm font-bold text-cyan-300 shadow-lg transition hover:bg-slate-800"
-            >
-              ›
-            </button>
-          )}
-        </div>
-
-        <div className="hide-scrollbar flex-1 overflow-y-auto px-3 py-7">
-          {!sidebarCollapsed && (
-            <p className="mb-3 px-3 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-600">
-              Main
-            </p>
-          )}
-
-          <nav className="space-y-1">
-            <NavigationItem
-              icon="▦"
-              label="Dashboard"
-              path="/supervisor/dashboard"
-              collapsed={sidebarCollapsed}
-            />
-
-            <NavigationItem
-              icon="▣"
-              label="Classrooms"
-              path="/supervisor/classrooms"
-              collapsed={sidebarCollapsed}
-            />
-
-            <NavigationItem
-              icon="⌁"
-              label="Monitoring"
-              path="/supervisor/monitoring"
-              collapsed={sidebarCollapsed}
-            />
-          </nav>
-
-          {!sidebarCollapsed && (
-            <p className="mb-3 mt-9 px-3 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-600">
-              Operations
-            </p>
-          )}
-
-          <nav className="mt-1 space-y-1">
-            <NavigationItem
-              icon="⚠"
-              label="Faults"
-              path="/supervisor/faults"
-              collapsed={sidebarCollapsed}
-            />
-
-            <NavigationItem
-              icon="⌘"
-              label="Tickets"
-              path="/supervisor/tickets"
-              active
-              collapsed={sidebarCollapsed}
-            />
-
-            <NavigationItem
-              icon="◉"
-              label="Notifications"
-              path="/supervisor/notifications"
-              collapsed={sidebarCollapsed}
-            />
-          </nav>
-
-          {!sidebarCollapsed && (
-            <div className="mt-8 rounded-2xl border border-cyan-400/10 bg-cyan-400/5 p-4">
-              <div className="flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full bg-emerald-400" />
-
-                <span className="text-xs font-semibold text-slate-300">
-                  Monitoring active
-                </span>
-              </div>
-
-              <p className="mt-3 text-[11px] leading-5 text-slate-500">
-                SIMMS is connected to the classroom
-                infrastructure monitoring system.
-              </p>
-            </div>
-          )}
-
-          {sidebarCollapsed && (
-            <div
-              title="Monitoring active"
-              className="mx-auto mt-8 flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-400/10"
-            >
-              <span className="h-2 w-2 rounded-full bg-emerald-400" />
-            </div>
-          )}
-        </div>
-
-        <div className="border-t border-white/10 p-3">
-          {!sidebarCollapsed && (
-            <div className="mb-3 rounded-xl bg-white/5 p-3">
-              <p className="truncate text-xs font-semibold text-white">
-                {supervisorName}
-              </p>
-
-              <p className="mt-1 truncate text-[10px] text-slate-500">
-                {supervisorEmail ||
-                  "Supervisor"}
-              </p>
-            </div>
-          )}
-
-          <button
-            type="button"
-            onClick={handleLogout}
-            title={
-              sidebarCollapsed
-                ? "Logout"
-                : undefined
-            }
-            className={`flex w-full items-center rounded-xl text-sm font-semibold text-slate-400 transition hover:bg-red-500/10 hover:text-red-300 ${
-              sidebarCollapsed
-                ? "justify-center px-2 py-2.5"
-                : "gap-3 px-3 py-2.5"
-            }`}
-          >
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/5">
-              ↪
-            </span>
-
-            {!sidebarCollapsed && (
-              <span>Logout</span>
-            )}
-          </button>
-        </div>
-      </aside>
-
-      {/* Main */}
-      <div
-        className={`min-h-screen transition-all duration-300 ${
-          sidebarCollapsed
-            ? "lg:pl-[76px]"
-            : "lg:pl-64"
-        }`}
-      >
-        <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
-          <div className="flex min-h-20 items-center justify-between gap-4 px-5 py-3 sm:px-8">
-            <div className="flex min-w-0 items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-950 text-sm font-black text-cyan-300 lg:hidden">
-                S
-              </div>
-
-              <div className="min-w-0">
-                <p className="text-xs font-bold uppercase tracking-[0.14em] text-cyan-600">
-                  Operations / Tickets
-                </p>
-
-                <h1 className="truncate text-xl font-black tracking-tight text-slate-900 sm:text-2xl">
-                  Ticket Details
-                </h1>
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={loadTicketDetails}
-              className="shrink-0 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-bold text-slate-600 transition hover:border-cyan-300 hover:text-cyan-600"
-            >
-              ↻ Refresh
-            </button>
-          </div>
-        </header>
-
-        <main className="px-5 py-7 sm:px-8 sm:py-9">
-          {/* Back */}
-          <button
-            type="button"
-            onClick={() =>
-              navigateTo(
-                "/supervisor/tickets"
-              )
-            }
-            className="mb-6 text-xs font-bold text-slate-500 transition hover:text-cyan-600"
-          >
-            ← Back to tickets
-          </button>
-
-          {/* Error */}
-          {error && (
-            <div className="rounded-2xl border border-red-200 bg-red-50 p-6">
-              <div className="flex items-start gap-4">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-100 text-red-600">
-                  ⚠
-                </div>
-
-                <div>
-                  <h2 className="text-sm font-black text-red-800">
-                    Unable to load ticket
-                  </h2>
-
-                  <p className="mt-1 text-xs leading-5 text-red-600">
-                    {error}
-                  </p>
-
-                  <button
-                    type="button"
-                    onClick={loadTicketDetails}
-                    className="mt-4 rounded-xl bg-red-600 px-4 py-2 text-xs font-bold text-white transition hover:bg-red-700"
-                  >
-                    Try again
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {!error && ticket && (
-            <>
-              {/* Ticket header */}
-              <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-                <div className="border-b border-slate-100 p-6 sm:p-8">
-                  <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
-                    <div className="flex min-w-0 items-start gap-4">
-                      <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-cyan-50 text-2xl text-cyan-600">
-                        ⌘
-                      </div>
-
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span
-                            className={`rounded-full border px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide ${getStatusClass(
-                              ticket.status
-                            )}`}
-                          >
-                            {ticket.status ||
-                              "Unknown"}
-                          </span>
-
-                          <span
-                            className={`rounded-full border px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide ${getPriorityClass(
-                              ticket.priority
-                            )}`}
-                          >
-                            {ticket.priority ||
-                              "No priority"}
-                          </span>
-                        </div>
-
-                        <h2 className="mt-3 text-2xl font-black tracking-tight text-slate-900 sm:text-3xl">
-                          Ticket #
-                          {ticket.ticket_id}
-                        </h2>
-
-                        <p className="mt-2 text-xs font-medium text-slate-400">
-                          Maintenance ticket generated
-                          from a classroom fault
-                        </p>
-                      </div>
-                    </div>
-
-                    {fault && (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          navigateTo(
-                            `/supervisor/faults/${fault.fault_id}`
-                          )
-                        }
-                        className="shrink-0 rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-bold text-slate-600 transition hover:border-cyan-300 hover:text-cyan-600"
-                      >
-                        View related fault →
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                <div className="grid gap-4 p-6 sm:grid-cols-2 lg:grid-cols-4 sm:p-8">
-                  <InfoItem
-                    label="Ticket ID"
-                    value={
-                      ticket.ticket_id ??
-                      "—"
-                    }
-                  />
-
-                  <InfoItem
-                    label="Fault ID"
-                    value={
-                      ticket.fault_id ??
-                      "—"
-                    }
-                  />
-
-                  <InfoItem
-                    label="Priority"
-                    value={
-                      ticket.priority ??
-                      "—"
-                    }
-                  />
-
-                  <InfoItem
-                    label="Status"
-                    value={
-                      ticket.status ??
-                      "—"
-                    }
-                  />
-                </div>
-              </section>
-
-              {/* Timeline */}
-              <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-                <div className="mb-5">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-cyan-600">
-                    Ticket timeline
-                  </p>
-
-                  <h3 className="mt-1 text-lg font-black text-slate-900">
-                    Maintenance lifecycle
-                  </h3>
-                </div>
-
-                <div className="grid gap-4 sm:grid-cols-3">
-                  <InfoItem
-                    label="Created"
-                    value={formatDateTime(
-                      ticket.created_at
-                    )}
-                  />
-
-                  <InfoItem
-                    label="Resolved"
-                    value={formatDateTime(
-                      ticket.resolved_at
-                    )}
-                  />
-
-                  <InfoItem
-                    label="Closed"
-                    value={formatDateTime(
-                      ticket.closed_at
-                    )}
-                  />
-                </div>
-              </section>
-
-              {/* Fault context */}
-              <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-                <div className="mb-5 flex items-start justify-between gap-4">
-                  <div>
-                    <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-red-500">
-                      Source fault
-                    </p>
-
-                    <h3 className="mt-1 text-lg font-black text-slate-900">
-                      Fault context
-                    </h3>
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h2 className="num text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
+                      Ticket #{ticket.ticket_id}
+                    </h2>
+                    <StatusBadge
+                      status={ticket.status}
+                      label={ticket.status ? undefined : "Unknown"}
+                    />
+                    <StatusBadge
+                      status={ticket.priority}
+                      label={ticket.priority ? `${formatLabel(ticket.priority)} priority` : "No priority"}
+                      dot={false}
+                    />
                   </div>
 
-                  {fault && (
-                    <span
-                      className={`rounded-full border px-3 py-1.5 text-[9px] font-bold uppercase tracking-wide ${getStatusClass(
-                        fault.status
-                      )}`}
-                    >
-                      {fault.status ||
-                        "Unknown"}
+                  <p className="mt-1.5 text-sm text-slate-500">
+                    Maintenance ticket generated from a classroom fault
+                  </p>
+
+                  <p className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
+                    <span className="flex items-center gap-1">
+                      <Icon name="alert" className="h-3.5 w-3.5" />
+                      <span className="num">Fault #{ticket.fault_id ?? "—"}</span>
                     </span>
-                  )}
+                    <span className="flex items-center gap-1">
+                      <Icon name="clock" className="h-3.5 w-3.5" />
+                      <span className="num">{formatDateTime(ticket.created_at)}</span>
+                    </span>
+                  </p>
                 </div>
+              </div>
 
+              {fault && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    navigateTo(
+                      `/supervisor/faults/${fault.fault_id}`
+                    )
+                  }
+                  className="btn btn-secondary self-start"
+                >
+                  View related fault
+                  <Icon name="arrowRight" className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+          </section>
+
+          <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+            {/* Main column */}
+            <div className="min-w-0 space-y-6">
+              <Card title="Ticket details" icon="clipboard">
+                <dl className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
+                  <DetailItem label="Ticket ID" mono>
+                    {ticket.ticket_id ?? "—"}
+                  </DetailItem>
+                  <DetailItem label="Fault ID" mono>
+                    {ticket.fault_id ?? "—"}
+                  </DetailItem>
+                  <DetailItem label="Priority">
+                    {ticket.priority ? (
+                      <StatusBadge status={ticket.priority} dot={false} size="sm" />
+                    ) : (
+                      "—"
+                    )}
+                  </DetailItem>
+                  <DetailItem label="Status">
+                    {ticket.status ? (
+                      <StatusBadge status={ticket.status} size="sm" />
+                    ) : (
+                      "—"
+                    )}
+                  </DetailItem>
+                </dl>
+              </Card>
+
+              <Card
+                title="Fault context"
+                subtitle="Source fault that generated this ticket"
+                icon="alert"
+                actions={
+                  fault && (
+                    <StatusBadge
+                      status={fault.status}
+                      label={fault.status ? undefined : "Unknown"}
+                      size="sm"
+                    />
+                  )
+                }
+              >
                 {fault ? (
-                  <div>
+                  <>
                     <div className="mb-4 flex flex-wrap items-center gap-2">
-                      <span className="rounded-full border border-red-200 bg-red-50 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide text-red-700">
-                        {getFaultTypeLabel(
-                          fault.fault_type
-                        )}
-                      </span>
-
-                      <span className="text-xs text-slate-400">
-                        Fault #
-                        {fault.fault_id}
+                      <StatusBadge tone="danger" label={getFaultTypeLabel(fault.fault_type)} />
+                      <span className="num text-xs text-slate-500">
+                        Fault #{fault.fault_id}
                       </span>
                     </div>
 
-                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                      <InfoItem
-                        label="Classroom"
-                        value={
-                          classroom?.room_name ||
-                          `Room ${fault.room_id}`
-                        }
-                      />
-
-                      <InfoItem
-                        label="Device"
-                        value={
-                          fault.device_id
-                            ? `Device #${fault.device_id}`
-                            : "Room-level"
-                        }
-                      />
-
-                      <InfoItem
-                        label="Confidence"
-                        value={
-                          fault.confidence !==
-                            null &&
-                          fault.confidence !==
-                            undefined
-                            ? `${(
-                                Number(
-                                  fault.confidence
-                                )
-                              ).toFixed(1)}%`
-                            : "—"
-                        }
-                      />
-
-                      <InfoItem
-                        label="Abnormal count"
-                        value={
-                          fault.abnormal_count ??
-                          "—"
-                        }
-                      />
-
-                      <InfoItem
-                        label="Detected"
-                        value={formatDateTime(
-                          fault.detected_at
-                        )}
-                      />
-
-                      <InfoItem
-                        label="Confirmed"
-                        value={formatDateTime(
-                          fault.confirmed_at
-                        )}
-                      />
-                    </div>
-                  </div>
+                    <dl className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
+                      <DetailItem label="Classroom">
+                        {classroom?.room_name ||
+                          `Room ${fault.room_id}`}
+                      </DetailItem>
+                      <DetailItem label="Device">
+                        {fault.device_id
+                          ? `Device #${fault.device_id}`
+                          : "Room-level"}
+                      </DetailItem>
+                      <DetailItem label="Confidence" mono>
+                        {fault.confidence !== null &&
+                        fault.confidence !== undefined
+                          ? `${Number(fault.confidence).toFixed(1)}%`
+                          : "—"}
+                      </DetailItem>
+                      <DetailItem label="Abnormal count" mono>
+                        {fault.abnormal_count ?? "—"}
+                      </DetailItem>
+                      <DetailItem label="Detected" mono>
+                        {formatDateTime(fault.detected_at)}
+                      </DetailItem>
+                      <DetailItem label="Confirmed" mono>
+                        {formatDateTime(fault.confirmed_at)}
+                      </DetailItem>
+                    </dl>
+                  </>
                 ) : (
-                  <div className="rounded-xl border border-amber-100 bg-amber-50/60 p-5">
-                    <p className="text-sm font-bold text-amber-800">
-                      Fault information is
-                      unavailable.
-                    </p>
-
-                    <p className="mt-1 text-xs leading-5 text-amber-700">
-                      The ticket still contains Fault #
-                      {ticket.fault_id ??
-                        "—"}.
-                    </p>
-                  </div>
+                  <Alert tone="warning" title="Fault information is unavailable">
+                    The ticket still references{" "}
+                    <span className="num">Fault #{ticket.fault_id ?? "—"}</span>.
+                  </Alert>
                 )}
-              </section>
+              </Card>
 
-              {/* Classroom */}
-              <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-                <div className="mb-5">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-cyan-600">
-                    Location
-                  </p>
-
-                  <h3 className="mt-1 text-lg font-black text-slate-900">
-                    Classroom information
-                  </h3>
-                </div>
-
+              <Card title="Classroom" subtitle="Location of the fault" icon="classroom">
                 {classroom ? (
-                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                    <InfoItem
-                      label="Room name"
-                      value={
-                        classroom.room_name ||
+                  <dl className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
+                    <DetailItem label="Room name">
+                      {classroom.room_name || "—"}
+                    </DetailItem>
+                    <DetailItem label="Room type">
+                      {classroom.room_type ? formatLabel(classroom.room_type) : "—"}
+                    </DetailItem>
+                    <DetailItem label="Building">
+                      {classroom.building || "—"}
+                    </DetailItem>
+                    <DetailItem label="Floor" mono>
+                      {classroom.floor ?? "—"}
+                    </DetailItem>
+                    <DetailItem label="Capacity" mono>
+                      {classroom.capacity ?? "—"}
+                    </DetailItem>
+                    <DetailItem label="Status">
+                      {classroom.status ? (
+                        <StatusBadge status={classroom.status} size="sm" />
+                      ) : (
                         "—"
-                      }
-                    />
-
-                    <InfoItem
-                      label="Room type"
-                      value={
-                        classroom.room_type ||
-                        "—"
-                      }
-                    />
-
-                    <InfoItem
-                      label="Building"
-                      value={
-                        classroom.building ||
-                        "—"
-                      }
-                    />
-
-                    <InfoItem
-                      label="Floor"
-                      value={
-                        classroom.floor ??
-                        "—"
-                      }
-                    />
-
-                    <InfoItem
-                      label="Capacity"
-                      value={
-                        classroom.capacity ??
-                        "—"
-                      }
-                    />
-
-                    <InfoItem
-                      label="Status"
-                      value={
-                        classroom.status ||
-                        "—"
-                      }
-                    />
-                  </div>
+                      )}
+                    </DetailItem>
+                  </dl>
                 ) : (
-                  <div className="rounded-xl border border-slate-100 bg-slate-50 p-5">
-                    <p className="text-sm font-semibold text-slate-600">
-                      Classroom information is
-                      unavailable.
-                    </p>
-
-                    {fault?.room_id && (
-                      <p className="mt-1 text-xs text-slate-400">
-                        Fault belongs to Room #
-                        {fault.room_id}.
-                      </p>
-                    )}
-                  </div>
+                  <EmptyState
+                    icon="classroom"
+                    title="Classroom information is unavailable"
+                    description={
+                      fault?.room_id
+                        ? `The fault belongs to Room #${fault.room_id}.`
+                        : undefined
+                    }
+                    className="py-8"
+                  />
                 )}
-              </section>
+              </Card>
 
-              {/* Maintenance notes */}
-              <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-                <div className="mb-5">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-cyan-600">
-                    Maintenance
-                  </p>
-
-                  <h3 className="mt-1 text-lg font-black text-slate-900">
-                    Maintenance notes
-                  </h3>
-                </div>
-
+              <Card title="Maintenance notes" icon="wrench">
                 {ticket.maintenance_notes ? (
-                  <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-5">
-                    <p className="whitespace-pre-wrap text-sm leading-7 text-slate-600">
-                      {
-                        ticket.maintenance_notes
-                      }
-                    </p>
-                  </div>
-                ) : (
-                  <div className="rounded-xl border border-slate-100 bg-slate-50 p-5">
-                    <p className="text-sm font-semibold text-slate-500">
-                      No maintenance notes have
-                      been recorded.
-                    </p>
-                  </div>
-                )}
-              </section>
-
-              {/* History */}
-              <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-                <div className="mb-6">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-cyan-600">
-                    Activity
+                  <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-700">
+                    {ticket.maintenance_notes}
                   </p>
-
-                  <h3 className="mt-1 text-lg font-black text-slate-900">
-                    Ticket history
-                  </h3>
-                </div>
-
-                {history.length === 0 ? (
-                  <div className="rounded-xl border border-slate-100 bg-slate-50 p-5">
-                    <p className="text-sm font-semibold text-slate-500">
-                      No ticket history records are
-                      available.
-                    </p>
-                  </div>
                 ) : (
-                  <div className="space-y-5">
-                    {history.map(
-                      (entry, index) => (
-                        <div
-                          key={
-                            entry.history_id ??
-                            entry.id ??
-                            index
-                          }
-                          className="relative flex gap-4"
-                        >
-                          {index <
-                            history.length -
-                              1 && (
-                            <div className="absolute left-4 top-9 h-[calc(100%+1.25rem)] w-px bg-slate-200" />
-                          )}
-
-                          <div className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-cyan-50 text-xs font-bold text-cyan-600">
-                            ✓
-                          </div>
-
-                          <div className="min-w-0 flex-1 rounded-xl border border-slate-100 bg-slate-50/70 p-4">
-                            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                              <p className="text-sm font-bold text-slate-800">
-                                {getHistoryActionLabel(
-                                  entry.action ||
-                                    entry.action_type ||
-                                    entry.status
-                                )}
-                              </p>
-
-                              <p className="text-[10px] font-medium text-slate-400">
-                                {formatDateTime(
-                                  entry.created_at ||
-                                    entry.changed_at ||
-                                    entry.timestamp
-                                )}
-                              </p>
-                            </div>
-
-                            {entry.status && (
-                              <p className="mt-2 text-xs text-slate-500">
-                                Status:{" "}
-                                <span className="font-semibold text-slate-700">
-                                  {
-                                    entry.status
-                                  }
-                                </span>
-                              </p>
-                            )}
-
-                            {entry.notes && (
-                              <p className="mt-2 whitespace-pre-wrap text-xs leading-5 text-slate-500">
-                                {
-                                  entry.notes
-                                }
-                              </p>
-                            )}
-
-                            {entry.changed_by && (
-                              <p className="mt-2 text-[10px] text-slate-400">
-                                Updated by:{" "}
-                                {
-                                  entry.changed_by
-                                }
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      )
-                    )}
-                  </div>
+                  <p className="text-sm text-slate-500">
+                    No maintenance notes have been recorded.
+                  </p>
                 )}
-              </section>
+              </Card>
+            </div>
 
-              {/* Operational note */}
-              <section className="mt-6 rounded-2xl border border-cyan-100 bg-cyan-50/60 p-6">
-                <div className="flex items-start gap-3">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-cyan-100 text-cyan-700">
-                    i
-                  </div>
+            {/* Side column */}
+            <div className="min-w-0 space-y-6">
+              <Card title="Lifecycle" subtitle="Key ticket milestones" icon="clock">
+                <ol className="relative ml-1.5 border-l border-slate-200">
+                  {lifecycle.map((step) => {
+                    const reached = Boolean(step.value);
 
-                  <div>
-                    <p className="text-sm font-black text-cyan-900">
-                      Supervisor view
-                    </p>
+                    return (
+                      <li key={step.key} className="relative pb-5 pl-6 last:pb-0">
+                        <span
+                          className={`absolute -left-[7px] top-1 h-3.5 w-3.5 rounded-full ring-4 ring-white ${
+                            reached ? "bg-brand-600" : "border-2 border-slate-300 bg-white"
+                          }`}
+                          aria-hidden="true"
+                        />
+                        <p className={`text-sm font-semibold ${reached ? "text-slate-900" : "text-slate-500"}`}>
+                          {step.label}
+                        </p>
+                        <p className="num mt-0.5 text-xs text-slate-500">
+                          {reached ? formatDateTime(step.value) : "Not yet"}
+                        </p>
+                      </li>
+                    );
+                  })}
+                </ol>
+              </Card>
 
-                    <p className="mt-1 text-xs leading-5 text-cyan-800">
-                      This page provides operational
-                      visibility into the maintenance ticket,
-                      its source fault and the ticket history.
-                      Physical maintenance actions remain part
-                      of the maintenance workflow.
-                    </p>
-                  </div>
-                </div>
-              </section>
-            </>
-          )}
-        </main>
-      </div>
-    </div>
+              <Card
+                title="Ticket history"
+                subtitle="Activity recorded on this ticket"
+                icon="history"
+                actions={
+                  history.length > 0 && (
+                    <span className="num rounded-md bg-slate-100 px-2 py-1 text-[11px] font-medium text-slate-600">
+                      {history.length}
+                    </span>
+                  )
+                }
+              >
+                {history.length === 0 ? (
+                  <EmptyState
+                    icon="history"
+                    title="No history yet"
+                    description="No ticket history records are available."
+                    className="py-8"
+                  />
+                ) : (
+                  <ol className="relative ml-1.5 border-l border-slate-200">
+                    {history.map((entry, index) => (
+                      <li
+                        key={
+                          entry.history_id ??
+                          entry.id ??
+                          index
+                        }
+                        className="relative pb-6 pl-6 last:pb-0"
+                      >
+                        <span
+                          className="absolute -left-[7px] top-1 h-3.5 w-3.5 rounded-full bg-brand-600 ring-4 ring-white"
+                          aria-hidden="true"
+                        />
+
+                        <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
+                          <p className="text-sm font-semibold text-slate-900">
+                            {getHistoryActionLabel(
+                              entry.action ||
+                                entry.action_type ||
+                                entry.status
+                            )}
+                          </p>
+                          {entry.status && (
+                            <StatusBadge status={entry.status} size="sm" />
+                          )}
+                        </div>
+
+                        <p className="num mt-0.5 text-xs text-slate-500">
+                          {formatDateTime(
+                            entry.created_at ||
+                              entry.changed_at ||
+                              entry.timestamp
+                          )}
+                        </p>
+
+                        {entry.notes && (
+                          <p className="mt-2 whitespace-pre-wrap rounded-lg bg-slate-50 px-3 py-2 text-[13px] leading-relaxed text-slate-600 ring-1 ring-slate-100">
+                            {entry.notes}
+                          </p>
+                        )}
+
+                        {entry.changed_by && (
+                          <p className="mt-2 flex items-center gap-1 text-xs text-slate-500">
+                            <Icon name="user" className="h-3.5 w-3.5" />
+                            Updated by{" "}
+                            <span className="font-medium text-slate-700">
+                              {entry.changed_by}
+                            </span>
+                          </p>
+                        )}
+                      </li>
+                    ))}
+                  </ol>
+                )}
+              </Card>
+
+              <Alert tone="info" title="Supervisor view">
+                This page provides operational visibility into the maintenance
+                ticket, its source fault and the ticket history. Physical
+                maintenance actions remain part of the maintenance workflow.
+              </Alert>
+            </div>
+          </div>
+        </>
+      ) : null}
+    </AppShell>
   );
 }

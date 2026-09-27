@@ -1,4 +1,17 @@
 import { useEffect, useState } from "react";
+import AppShell from "../../components/AppShell";
+import Icon from "../../components/Icon";
+import {
+  Alert,
+  Card,
+  DetailItem,
+  EmptyState,
+  IconTile,
+  RefreshButton,
+  StatusBadge,
+} from "../../components/ui";
+import { formatLabel } from "../../lib/format";
+import { navigateTo } from "../../lib/session";
 
 const API_BASE_URL = "http://localhost:8000";
 
@@ -11,10 +24,6 @@ function getAuthHeaders() {
       ? { Authorization: `Bearer ${token}` }
       : {}),
   };
-}
-
-function navigateTo(path) {
-  window.location.href = path;
 }
 
 function formatDateTime(value) {
@@ -48,43 +57,31 @@ function getFaultTypeLabel(faultType) {
   );
 }
 
-function getFaultTypeClass(faultType) {
-  switch (
-    String(faultType || "").toUpperCase()
-  ) {
-    case "FAN_FAILURE":
-      return "border-amber-200 bg-amber-50 text-amber-700";
+// Icon + tone per fault type (replaces the old per-type colour classes).
+const FAULT_TYPE_META = {
+  FAN_FAILURE: { icon: "fan", tone: "warning" },
+  LIGHTS_LEFT_ON: { icon: "lightbulb", tone: "warning" },
+  ELECTRICAL_ABNORMALITY: { icon: "zap", tone: "danger" },
+};
 
-    case "LIGHTS_LEFT_ON":
-      return "border-yellow-200 bg-yellow-50 text-yellow-700";
-
-    case "ELECTRICAL_ABNORMALITY":
-      return "border-red-200 bg-red-50 text-red-700";
-
-    default:
-      return "border-slate-200 bg-slate-50 text-slate-600";
-  }
+function getFaultTypeMeta(faultType) {
+  return (
+    FAULT_TYPE_META[String(faultType || "").toUpperCase()] || {
+      icon: "alert",
+      tone: "neutral",
+    }
+  );
 }
 
-function getStatusClass(status) {
-  switch (
-    String(status || "").toUpperCase()
-  ) {
-    case "CONFIRMED":
-      return "border-red-200 bg-red-50 text-red-700";
+// The original page styled ACTIVE faults red and unknown statuses amber.
+function getFaultStatusTone(status) {
+  const key = String(status || "").toUpperCase();
 
-    case "ACTIVE":
-      return "border-red-200 bg-red-50 text-red-700";
+  if (key === "ACTIVE" || key === "CONFIRMED") return "danger";
+  if (key === "RESOLVED" || key === "CLEARED") return "success";
+  if (key === "CLOSED" || key === "FALSE_POSITIVE") return "neutral";
 
-    case "RESOLVED":
-      return "border-emerald-200 bg-emerald-50 text-emerald-700";
-
-    case "CLOSED":
-      return "border-slate-200 bg-slate-100 text-slate-600";
-
-    default:
-      return "border-amber-200 bg-amber-50 text-amber-700";
-  }
+  return undefined;
 }
 
 function getConfidenceLabel(confidence) {
@@ -104,79 +101,43 @@ function getConfidenceLabel(confidence) {
   return `${(value).toFixed(1)}%`;
 }
 
-function NavigationItem({
-  icon,
-  label,
-  path,
-  active,
-  collapsed,
-}) {
+function DetailsSkeleton() {
   return (
-    <button
-      type="button"
-      onClick={() => navigateTo(path)}
-      title={
-        collapsed ? label : undefined
-      }
-      className={`group flex w-full items-center rounded-xl text-left text-sm font-semibold transition ${
-        collapsed
-          ? "justify-center px-2 py-2.5"
-          : "gap-3 px-3 py-2.5"
-      } ${
-        active
-          ? "bg-cyan-500 text-white shadow-md shadow-cyan-500/20"
-          : "text-slate-400 hover:bg-white/5 hover:text-white"
-      }`}
-    >
-      <span
-        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-sm ${
-          active
-            ? "bg-white/15 text-white"
-            : "bg-white/5 text-slate-400 group-hover:text-cyan-300"
-        }`}
-      >
-        {icon}
-      </span>
-
-      {!collapsed && (
-        <span className="truncate">
-          {label}
-        </span>
-      )}
-    </button>
-  );
-}
-
-function InfoItem({
-  label,
-  value,
-  valueClass = "text-slate-800",
-}) {
-  return (
-    <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-4">
-      <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">
-        {label}
-      </p>
-
-      <p
-        className={`mt-2 break-words text-sm font-bold ${valueClass}`}
-      >
-        {value}
-      </p>
+    <div aria-busy="true" aria-live="polite">
+      <span className="sr-only">Loading fault details…</span>
+      <div className="card p-5 sm:p-6">
+        <div className="flex items-start gap-4">
+          <span className="skeleton h-12 w-12 rounded-xl" />
+          <div className="flex-1 space-y-3">
+            <span className="skeleton block h-5 w-48" />
+            <span className="skeleton block h-3 w-32" />
+          </div>
+          <span className="skeleton hidden h-14 w-32 sm:block" />
+        </div>
+      </div>
+      <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+        <div className="card h-80 p-5">
+          <span className="skeleton block h-4 w-40" />
+          <div className="mt-6 grid gap-4 sm:grid-cols-2">
+            {Array.from({ length: 6 }).map((_, index) => (
+              <span key={index} className="skeleton block h-10 w-full" />
+            ))}
+          </div>
+        </div>
+        <div className="card h-80 p-5">
+          <span className="skeleton block h-4 w-32" />
+          <div className="mt-6 space-y-4">
+            {Array.from({ length: 3 }).map((_, index) => (
+              <span key={index} className="skeleton block h-10 w-full" />
+            ))}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
 
 export default function SupervisorFaultDetails() {
-  const [sidebarCollapsed, setSidebarCollapsed] =
-    useState(false);
-
-  const [supervisorName, setSupervisorName] =
-    useState("Supervisor");
-
-  const [supervisorEmail, setSupervisorEmail] =
-    useState("");
-
   const [fault, setFault] =
     useState(null);
 
@@ -194,22 +155,6 @@ export default function SupervisorFaultDetails() {
 
   const faultId =
     window.location.pathname.split("/").pop();
-
-  useEffect(() => {
-    const storedName =
-      localStorage.getItem("name");
-
-    const storedEmail =
-      localStorage.getItem("email");
-
-    if (storedName) {
-      setSupervisorName(storedName);
-    }
-
-    if (storedEmail) {
-      setSupervisorEmail(storedEmail);
-    }
-  }, []);
 
   useEffect(() => {
     if (faultId) {
@@ -341,665 +286,233 @@ export default function SupervisorFaultDetails() {
     }
   }
 
-  function handleLogout() {
-    localStorage.removeItem(
-      "access_token"
-    );
-    localStorage.removeItem(
-      "token_type"
-    );
-    localStorage.removeItem("user_id");
-    localStorage.removeItem("name");
-    localStorage.removeItem("email");
-    localStorage.removeItem("role");
-    localStorage.removeItem("is_active");
+  const displayId = fault?.fault_id ?? faultId;
+  const meta = getFaultTypeMeta(fault?.fault_type);
 
-    window.location.href = "/";
-  }
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-slate-50">
-        <div className="flex min-h-screen items-center justify-center">
-          <div className="text-center">
-            <div className="mx-auto h-9 w-9 animate-spin rounded-full border-4 border-slate-200 border-t-cyan-500" />
-
-            <p className="mt-4 text-sm font-semibold text-slate-500">
-              Loading fault details...
-            </p>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const timeline = fault
+    ? [
+        { label: "Detected", value: fault.detected_at, icon: "crosshair" },
+        { label: "Confirmed", value: fault.confirmed_at, icon: "checkCircle" },
+        { label: "Record created", value: fault.created_at, icon: "clipboard" },
+      ]
+    : [];
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900">
-      {/* Sidebar */}
-      <aside
-        className={`fixed inset-y-0 left-0 z-40 hidden flex-col bg-slate-950 transition-all duration-300 lg:flex ${
-          sidebarCollapsed
-            ? "w-[76px]"
-            : "w-64"
-        }`}
-      >
-        <div
-          className={`flex h-20 items-center border-b border-white/10 ${
-            sidebarCollapsed
-              ? "justify-center px-3"
-              : "justify-between px-5"
-          }`}
-        >
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-cyan-400 text-lg font-black text-slate-950 shadow-lg shadow-cyan-400/20">
-              S
-            </div>
-
-            {!sidebarCollapsed && (
-              <div>
-                <p className="font-black tracking-[0.2em] text-white">
-                  SIMMS
-                </p>
-
-                <p className="text-[9px] uppercase tracking-[0.13em] text-slate-500">
-                  Supervisor Console
-                </p>
-              </div>
-            )}
-          </div>
-
-          {!sidebarCollapsed && (
-            <button
-              type="button"
-              onClick={() =>
-                setSidebarCollapsed(true)
-              }
-              title="Collapse sidebar"
-              className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 transition hover:bg-white/10 hover:text-white"
-            >
-              ‹
-            </button>
-          )}
-
-          {sidebarCollapsed && (
-            <button
-              type="button"
-              onClick={() =>
-                setSidebarCollapsed(false)
-              }
-              title="Expand sidebar"
-              className="absolute -right-3 top-6 flex h-7 w-7 items-center justify-center rounded-full border border-slate-700 bg-slate-900 text-sm font-bold text-cyan-300 shadow-lg transition hover:bg-slate-800"
-            >
-              ›
-            </button>
-          )}
-        </div>
-
-        <div className="hide-scrollbar flex-1 overflow-y-auto px-3 py-7">
-          {!sidebarCollapsed && (
-            <p className="mb-3 px-3 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-600">
-              Main
-            </p>
-          )}
-
-          <nav className="space-y-1">
-            <NavigationItem
-              icon="▦"
-              label="Dashboard"
-              path="/supervisor/dashboard"
-              collapsed={sidebarCollapsed}
-            />
-
-            <NavigationItem
-              icon="▣"
-              label="Classrooms"
-              path="/supervisor/classrooms"
-              collapsed={sidebarCollapsed}
-            />
-
-            <NavigationItem
-              icon="⌁"
-              label="Monitoring"
-              path="/supervisor/monitoring"
-              collapsed={sidebarCollapsed}
-            />
-          </nav>
-
-          {!sidebarCollapsed && (
-            <p className="mb-3 mt-9 px-3 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-600">
-              Operations
-            </p>
-          )}
-
-          <nav className="mt-1 space-y-1">
-            <NavigationItem
-              icon="⚠"
-              label="Faults"
-              path="/supervisor/faults"
-              active
-              collapsed={sidebarCollapsed}
-            />
-
-            <NavigationItem
-              icon="⌘"
-              label="Tickets"
-              path="/supervisor/tickets"
-              collapsed={sidebarCollapsed}
-            />
-
-            <NavigationItem
-              icon="◉"
-              label="Notifications"
-              path="/supervisor/notifications"
-              collapsed={sidebarCollapsed}
-            />
-          </nav>
-
-          {!sidebarCollapsed && (
-            <div className="mt-8 rounded-2xl border border-cyan-400/10 bg-cyan-400/5 p-4">
-              <div className="flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full bg-emerald-400" />
-
-                <span className="text-xs font-semibold text-slate-300">
-                  Monitoring active
-                </span>
-              </div>
-
-              <p className="mt-3 text-[11px] leading-5 text-slate-500">
-                SIMMS is connected to the classroom
-                infrastructure monitoring system.
-              </p>
-            </div>
-          )}
-
-          {sidebarCollapsed && (
-            <div
-              title="Monitoring active"
-              className="mx-auto mt-8 flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-400/10"
-            >
-              <span className="h-2 w-2 rounded-full bg-emerald-400" />
-            </div>
-          )}
-        </div>
-
-        <div className="border-t border-white/10 p-3">
-          {!sidebarCollapsed && (
-            <div className="mb-3 rounded-xl bg-white/5 p-3">
-              <p className="truncate text-xs font-semibold text-white">
-                {supervisorName}
-              </p>
-
-              <p className="mt-1 truncate text-[10px] text-slate-500">
-                {supervisorEmail ||
-                  "Supervisor"}
-              </p>
-            </div>
-          )}
-
-          <button
-            type="button"
-            onClick={handleLogout}
-            title={
-              sidebarCollapsed
-                ? "Logout"
-                : undefined
-            }
-            className={`flex w-full items-center rounded-xl text-sm font-semibold text-slate-400 transition hover:bg-red-500/10 hover:text-red-300 ${
-              sidebarCollapsed
-                ? "justify-center px-2 py-2.5"
-                : "gap-3 px-3 py-2.5"
-            }`}
-          >
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/5">
-              ↪
-            </span>
-
-            {!sidebarCollapsed && (
-              <span>Logout</span>
-            )}
-          </button>
-        </div>
-      </aside>
-
-      {/* Main */}
-      <div
-        className={`min-h-screen transition-all duration-300 ${
-          sidebarCollapsed
-            ? "lg:pl-[76px]"
-            : "lg:pl-64"
-        }`}
-      >
-        <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
-          <div className="flex min-h-20 items-center justify-between gap-4 px-5 py-3 sm:px-8">
-            <div className="flex min-w-0 items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-950 text-sm font-black text-cyan-300 lg:hidden">
-                S
-              </div>
-
-              <div className="min-w-0">
-                <p className="text-xs font-bold uppercase tracking-[0.14em] text-red-500">
-                  Operations / Faults
-                </p>
-
-                <h1 className="truncate text-xl font-black tracking-tight text-slate-900 sm:text-2xl">
-                  Fault Details
-                </h1>
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={loadFaultDetails}
-              disabled={loading}
-              className="shrink-0 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-bold text-slate-600 transition hover:border-cyan-300 hover:text-cyan-600 disabled:opacity-50"
-            >
-              ↻ Refresh
-            </button>
-          </div>
-        </header>
-
-        <main className="px-5 py-7 sm:px-8 sm:py-9">
-          {/* Back */}
-          <button
-            type="button"
-            onClick={() =>
-              navigateTo(
-                "/supervisor/faults"
-              )
-            }
-            className="mb-6 text-xs font-bold text-slate-500 transition hover:text-cyan-600"
-          >
-            ← Back to active faults
-          </button>
-
-          {/* Error */}
+    <AppShell
+      eyebrow="Faults"
+      title={displayId ? `Fault #${displayId}` : "Fault details"}
+      backHref="/supervisor/faults"
+      actions={<RefreshButton onClick={loadFaultDetails} loading={loading} />}
+    >
+      {loading ? (
+        <DetailsSkeleton />
+      ) : (
+        <>
           {error && (
-            <div className="rounded-2xl border border-red-200 bg-red-50 p-6">
-              <div className="flex items-start gap-4">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-100 text-red-600">
-                  ⚠
-                </div>
-
-                <div>
-                  <h2 className="text-sm font-black text-red-800">
-                    Unable to load fault
-                    details
-                  </h2>
-
-                  <p className="mt-1 text-xs leading-5 text-red-600">
-                    {error}
-                  </p>
-
-                  <button
-                    type="button"
-                    onClick={loadFaultDetails}
-                    className="mt-4 rounded-xl bg-red-600 px-4 py-2 text-xs font-bold text-white transition hover:bg-red-700"
-                  >
-                    Try again
-                  </button>
-                </div>
-              </div>
-            </div>
+            <Alert tone="danger" title="Unable to load fault details" onRetry={loadFaultDetails}>
+              {error}
+            </Alert>
           )}
 
-          {/* Fault */}
           {!error && fault && (
             <>
-              {/* Hero */}
-              <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-                <div className="border-b border-slate-100 p-6 sm:p-8">
-                  <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
-                    <div className="flex min-w-0 items-start gap-4">
-                      <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-red-50 text-2xl text-red-500">
-                        ⚠
+              {/* Summary */}
+              <section className="card p-5 sm:p-6">
+                <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="flex min-w-0 items-start gap-4">
+                    <IconTile icon={meta.icon} tone={meta.tone} className="h-12 w-12 rounded-xl" />
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <StatusBadge tone={meta.tone} label={getFaultTypeLabel(fault.fault_type)} dot={false} />
+                        <StatusBadge
+                          status={fault.status}
+                          tone={getFaultStatusTone(fault.status) || (fault.status ? undefined : "warning")}
+                          label={fault.status ? formatLabel(fault.status) : "Unknown"}
+                        />
                       </div>
-
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span
-                            className={`inline-flex rounded-full border px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide ${getFaultTypeClass(
-                              fault.fault_type
-                            )}`}
-                          >
-                            {getFaultTypeLabel(
-                              fault.fault_type
-                            )}
-                          </span>
-
-                          <span
-                            className={`inline-flex rounded-full border px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide ${getStatusClass(
-                              fault.status
-                            )}`}
-                          >
-                            {fault.status ||
-                              "Unknown"}
-                          </span>
-                        </div>
-
-                        <h2 className="mt-3 text-2xl font-black tracking-tight text-slate-900 sm:text-3xl">
-                          {getFaultTypeLabel(
-                            fault.fault_type
-                          )}
-                        </h2>
-
-                        <p className="mt-2 text-xs font-medium text-slate-400">
-                          Fault #{fault.fault_id}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="rounded-2xl bg-red-50 px-5 py-4 lg:min-w-[170px]">
-                      <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-red-400">
-                        Confidence
+                      <h2 className="mt-2.5 text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
+                        {getFaultTypeLabel(fault.fault_type)}
+                      </h2>
+                      <p className="mt-1 flex flex-wrap items-center gap-x-1.5 text-sm text-slate-500">
+                        <span className="font-medium text-slate-700">
+                          {classroom?.room_name || `Room ${fault.room_id}`}
+                        </span>
+                        <span aria-hidden="true">·</span>
+                        <span className="num">
+                          {fault.device_id ? `Device #${fault.device_id}` : "Room-level fault"}
+                        </span>
+                        <span aria-hidden="true">·</span>
+                        <span className="num">Fault #{fault.fault_id}</span>
                       </p>
+                    </div>
+                  </div>
 
-                      <p className="mt-1 text-2xl font-black text-red-700">
-                        {getConfidenceLabel(
-                          fault.confidence
-                        )}
+                  <div className="flex shrink-0 items-stretch gap-3">
+                    <div className="rounded-lg border border-slate-200 bg-slate-50/70 px-4 py-3 sm:min-w-[140px]">
+                      <p className="text-xs font-medium text-slate-500">Confidence</p>
+                      <p className="num mt-0.5 text-2xl font-semibold tracking-tight text-slate-900">
+                        {getConfidenceLabel(fault.confidence)}
+                      </p>
+                    </div>
+                    <div className="rounded-lg border border-slate-200 bg-slate-50/70 px-4 py-3 sm:min-w-[140px]">
+                      <p className="text-xs font-medium text-slate-500">Abnormal readings</p>
+                      <p className="num mt-0.5 text-2xl font-semibold tracking-tight text-slate-900">
+                        {fault.abnormal_count ?? "—"}
                       </p>
                     </div>
                   </div>
                 </div>
-
-                {/* Core details */}
-                <div className="grid gap-4 p-6 sm:grid-cols-2 sm:p-8 lg:grid-cols-4">
-                  <InfoItem
-                    label="Classroom"
-                    value={
-                      classroom?.room_name ||
-                      `Room ${fault.room_id}`
-                    }
-                  />
-
-                  <InfoItem
-                    label="Room ID"
-                    value={
-                      fault.room_id ??
-                      "—"
-                    }
-                  />
-
-                  <InfoItem
-                    label="Device"
-                    value={
-                      fault.device_id
-                        ? `Device #${fault.device_id}`
-                        : "Room-level fault"
-                    }
-                  />
-
-                  <InfoItem
-                    label="Abnormal observations"
-                    value={
-                      fault.abnormal_count ??
-                      "—"
-                    }
-                  />
-                </div>
               </section>
 
-              {/* Detection information */}
-              <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-                <div className="mb-5">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-cyan-600">
-                    Detection timeline
-                  </p>
+              <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+                {/* Left column */}
+                <div className="space-y-6">
+                  <Card title="Fault details" subtitle="Read from the backend fault record" icon="alert">
+                    <dl className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
+                      <DetailItem label="Fault type">{getFaultTypeLabel(fault.fault_type)}</DetailItem>
+                      <DetailItem label="Status">{fault.status ? formatLabel(fault.status) : "Unknown"}</DetailItem>
+                      <DetailItem label="Classroom">{classroom?.room_name || `Room ${fault.room_id}`}</DetailItem>
+                      <DetailItem label="Room ID" mono>{fault.room_id ?? "—"}</DetailItem>
+                      <DetailItem label="Device" mono>
+                        {fault.device_id ? `Device #${fault.device_id}` : "Room-level fault"}
+                      </DetailItem>
+                      <DetailItem label="Abnormal observations" mono>{fault.abnormal_count ?? "—"}</DetailItem>
+                      <DetailItem label="Confidence" mono>{getConfidenceLabel(fault.confidence)}</DetailItem>
+                      <DetailItem label="Fault ID" mono>{fault.fault_id}</DetailItem>
+                    </dl>
+                  </Card>
 
-                  <h3 className="mt-1 text-lg font-black text-slate-900">
-                    Fault lifecycle
-                  </h3>
-                </div>
-
-                <div className="grid gap-4 md:grid-cols-3">
-                  <InfoItem
-                    label="Detected at"
-                    value={formatDateTime(
-                      fault.detected_at
-                    )}
-                  />
-
-                  <InfoItem
-                    label="Confirmed at"
-                    value={formatDateTime(
-                      fault.confirmed_at
-                    )}
-                  />
-
-                  <InfoItem
-                    label="Created at"
-                    value={formatDateTime(
-                      fault.created_at
-                    )}
-                  />
-                </div>
-              </section>
-
-              {/* Classroom */}
-              <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-                <div className="mb-5 flex items-start justify-between gap-4">
-                  <div>
-                    <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-cyan-600">
-                      Location
-                    </p>
-
-                    <h3 className="mt-1 text-lg font-black text-slate-900">
-                      Classroom information
-                    </h3>
-                  </div>
-
-                  {classroom && (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        navigateTo(
-                          `/supervisor/classrooms/${fault.room_id}`
-                        )
-                      }
-                      className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 transition hover:border-cyan-300 hover:text-cyan-600"
-                    >
-                      View classroom →
-                    </button>
-                  )}
-                </div>
-
-                {classroom ? (
-                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                    <InfoItem
-                      label="Room name"
-                      value={
-                        classroom.room_name ||
-                        "—"
-                      }
-                    />
-
-                    <InfoItem
-                      label="Room type"
-                      value={
-                        classroom.room_type ||
-                        "—"
-                      }
-                    />
-
-                    <InfoItem
-                      label="Building"
-                      value={
-                        classroom.building ||
-                        "—"
-                      }
-                    />
-
-                    <InfoItem
-                      label="Floor"
-                      value={
-                        classroom.floor ??
-                        "—"
-                      }
-                    />
-
-                    <InfoItem
-                      label="Capacity"
-                      value={
-                        classroom.capacity ??
-                        "—"
-                      }
-                    />
-
-                    <InfoItem
-                      label="Status"
-                      value={
-                        classroom.status ||
-                        "—"
-                      }
-                    />
-                  </div>
-                ) : (
-                  <div className="rounded-xl border border-slate-100 bg-slate-50 p-5">
-                    <p className="text-sm font-semibold text-slate-600">
-                      Classroom information is
-                      unavailable.
-                    </p>
-
-                    <p className="mt-1 text-xs text-slate-400">
-                      The fault record still identifies
-                      this classroom as Room #
-                      {fault.room_id}.
-                    </p>
-                  </div>
-                )}
-              </section>
-
-              {/* Ticket */}
-              <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-                <div className="mb-5">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-cyan-600">
-                    Maintenance
-                  </p>
-
-                  <h3 className="mt-1 text-lg font-black text-slate-900">
-                    Related ticket
-                  </h3>
-                </div>
-
-                {ticket ? (
-                  <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-5">
-                    <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
-                      <div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-sm font-black text-slate-800">
-                            Ticket #
-                            {ticket.ticket_id ??
-                              "—"}
-                          </span>
-
-                          {ticket.status && (
-                            <span
-                              className={`rounded-full border px-2.5 py-1 text-[9px] font-bold uppercase tracking-wide ${getStatusClass(
-                                ticket.status
-                              )}`}
-                            >
-                              {
-                                ticket.status
-                              }
-                            </span>
-                          )}
-                        </div>
-
-                        <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                          <InfoItem
-                            label="Priority"
-                            value={
-                              ticket.priority ??
-                              "—"
-                            }
-                          />
-
-                          <InfoItem
-                            label="Created"
-                            value={formatDateTime(
-                              ticket.created_at
-                            )}
-                          />
-
-                          <InfoItem
-                            label="Resolved"
-                            value={formatDateTime(
-                              ticket.resolved_at
-                            )}
-                          />
-                        </div>
-                      </div>
-
-                      {ticket.ticket_id && (
+                  <Card
+                    title="Classroom information"
+                    subtitle="Location of the affected infrastructure"
+                    icon="classroom"
+                    actions={
+                      classroom && (
                         <button
                           type="button"
                           onClick={() =>
                             navigateTo(
-                              `/supervisor/tickets/${ticket.ticket_id}`
+                              `/supervisor/classrooms/${fault.room_id}`
                             )
                           }
-                          className="shrink-0 rounded-xl bg-slate-900 px-4 py-2.5 text-xs font-bold text-white transition hover:bg-slate-800"
+                          className="btn btn-sm btn-secondary"
                         >
-                          Open ticket →
+                          View classroom
+                          <Icon name="arrowRight" className="h-3.5 w-3.5" />
                         </button>
-                      )}
-                    </div>
-
-                    {ticket.maintenance_notes && (
-                      <div className="mt-4 rounded-xl border border-slate-200 bg-white p-4">
-                        <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">
-                          Maintenance notes
-                        </p>
-
-                        <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-600">
-                          {
-                            ticket.maintenance_notes
-                          }
-                        </p>
-                      </div>
+                      )
+                    }
+                  >
+                    {classroom ? (
+                      <dl className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
+                        <DetailItem label="Room name">{classroom.room_name || "—"}</DetailItem>
+                        <DetailItem label="Room type">{classroom.room_type ? formatLabel(classroom.room_type) : "—"}</DetailItem>
+                        <DetailItem label="Building">{classroom.building || "—"}</DetailItem>
+                        <DetailItem label="Floor" mono>{classroom.floor ?? "—"}</DetailItem>
+                        <DetailItem label="Capacity" mono>{classroom.capacity ?? "—"}</DetailItem>
+                        <DetailItem label="Status">
+                          {classroom.status ? <StatusBadge status={classroom.status} size="sm" /> : "—"}
+                        </DetailItem>
+                      </dl>
+                    ) : (
+                      <EmptyState
+                        icon="building"
+                        title="Classroom information is unavailable"
+                        description={`The fault record still identifies this classroom as Room #${fault.room_id}.`}
+                        className="py-8"
+                      />
                     )}
-                  </div>
-                ) : (
-                  <div className="rounded-xl border border-amber-100 bg-amber-50/60 p-5">
-                    <p className="text-sm font-bold text-amber-800">
-                      No related ticket found.
-                    </p>
-
-                    <p className="mt-1 text-xs leading-5 text-amber-700">
-                      This fault currently does not have
-                      a ticket returned by the ticket
-                      endpoint.
-                    </p>
-                  </div>
-                )}
-              </section>
-
-              {/* Operational note */}
-              <section className="mt-6 rounded-2xl border border-cyan-100 bg-cyan-50/60 p-6">
-                <div className="flex items-start gap-3">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-cyan-100 text-cyan-700">
-                    i
-                  </div>
-
-                  <div>
-                    <p className="text-sm font-black text-cyan-900">
-                      Monitoring continues
-                    </p>
-
-                    <p className="mt-1 text-xs leading-5 text-cyan-800">
-                      SIMMS continues monitoring the
-                      classroom independently of this
-                      fault record. The fault details shown
-                      here are read from the backend fault
-                      record.
-                    </p>
-                  </div>
+                  </Card>
                 </div>
-              </section>
+
+                {/* Right column */}
+                <div className="space-y-6">
+                  <Card title="Detection timeline" subtitle="Fault lifecycle" icon="history">
+                    <ol className="relative ml-1.5 space-y-5 border-l border-slate-200">
+                      {timeline.map((step) => {
+                        const reached = Boolean(step.value);
+
+                        return (
+                          <li key={step.label} className="relative pl-6">
+                            <span
+                              className={`absolute -left-[5px] top-1.5 h-2.5 w-2.5 rounded-full ring-4 ring-white ${reached ? "bg-brand-500" : "bg-slate-300"}`}
+                              aria-hidden="true"
+                            />
+                            <p className="flex items-center gap-1.5 text-xs font-medium text-slate-500">
+                              <Icon name={step.icon} className="h-3.5 w-3.5" />
+                              {step.label}
+                            </p>
+                            <p className={`num mt-0.5 text-sm ${reached ? "font-semibold text-slate-900" : "text-slate-500"}`}>
+                              {reached ? formatDateTime(step.value) : "Not recorded"}
+                            </p>
+                          </li>
+                        );
+                      })}
+                    </ol>
+                  </Card>
+
+                  <Card title="Related ticket" subtitle="Maintenance work for this fault" icon="ticket">
+                    {ticket ? (
+                      <div>
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="num text-sm font-semibold text-slate-900">
+                              Ticket #{ticket.ticket_id ?? "—"}
+                            </span>
+                            {ticket.status && <StatusBadge status={ticket.status} size="sm" />}
+                          </div>
+                          {ticket.ticket_id && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                navigateTo(
+                                  `/supervisor/tickets/${ticket.ticket_id}`
+                                )
+                              }
+                              className="btn btn-sm btn-primary"
+                            >
+                              Open ticket
+                              <Icon name="arrowRight" className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                        </div>
+
+                        <dl className="mt-4 grid gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+                          <DetailItem label="Priority">
+                            {ticket.priority ? <StatusBadge status={ticket.priority} dot={false} size="sm" /> : "—"}
+                          </DetailItem>
+                          <DetailItem label="Created" mono>{formatDateTime(ticket.created_at)}</DetailItem>
+                          <DetailItem label="Resolved" mono>{formatDateTime(ticket.resolved_at)}</DetailItem>
+                        </dl>
+
+                        {ticket.maintenance_notes && (
+                          <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50/70 p-3.5">
+                            <p className="text-xs font-medium text-slate-500">Maintenance notes</p>
+                            <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-slate-700">
+                              {ticket.maintenance_notes}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <EmptyState
+                        icon="ticket"
+                        title="No related ticket found"
+                        description="This fault currently does not have a ticket returned by the ticket endpoint."
+                        className="py-8"
+                      />
+                    )}
+                  </Card>
+
+                  <Alert tone="info" title="Monitoring continues">
+                    SIMMS continues monitoring the classroom independently of this fault record. The fault details shown here are read from the backend fault record.
+                  </Alert>
+                </div>
+              </div>
             </>
           )}
-        </main>
-      </div>
-    </div>
+        </>
+      )}
+    </AppShell>
   );
 }

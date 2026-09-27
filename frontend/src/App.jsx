@@ -9,6 +9,7 @@ import AdminCalibration from "./pages/admin/AdminCalibration";
 
 import SupervisorDashboard from "./pages/supervisor/SupervisorDashboard";
 import SupervisorClassrooms from "./pages/supervisor/SupervisorClassrooms";
+import SupervisorClassroomDetails from "./pages/supervisor/SupervisorClassroomDetails";
 import SupervisorMonitoring from "./pages/supervisor/SupervisorMonitoring";
 import SupervisorTickets from "./pages/supervisor/SupervisorTickets";
 import SupervisorTicketDetails from "./pages/supervisor/SupervisorTicketDetails";
@@ -20,6 +21,40 @@ import MaintenanceDashboard from "./pages/maintenance/MaintenanceDashboard";
 import MaintenanceTickets from "./pages/maintenance/MaintenanceTickets";
 import MaintenanceTicketDetails from "./pages/maintenance/MaintenanceTicketDetails";
 
+import Icon from "./components/Icon";
+import { BrandMark } from "./components/AppShell";
+
+function StatusScreen({ icon, title, message }) {
+    const role = localStorage.getItem("role");
+    const home =
+        role === "ADMIN"
+            ? "/admin/dashboard"
+            : role === "SUPERVISOR"
+              ? "/supervisor/dashboard"
+              : role === "MAINTENANCE_STAFF"
+                ? "/maintenance/dashboard"
+                : "/";
+
+    return (
+        <main className="flex min-h-dvh items-center justify-center bg-canvas px-5">
+            <div className="card w-full max-w-sm animate-slide-up p-8 text-center">
+                <div className="mx-auto mb-6 flex w-fit items-center gap-2.5">
+                    <BrandMark className="h-8 w-8" textClass="text-sm" />
+                    <span className="text-sm font-bold tracking-[0.16em] text-slate-900">SIMMS</span>
+                </div>
+                <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-slate-600 ring-1 ring-slate-200">
+                    <Icon name={icon} className="h-5 w-5" />
+                </span>
+                <h1 className="mt-5 text-lg font-bold tracking-tight text-slate-900">{title}</h1>
+                <p className="mt-1.5 text-sm text-slate-500">{message}</p>
+                <a href={home} className="btn btn-primary mt-6 w-full">
+                    <Icon name="arrowLeft" className="h-4 w-4" />
+                    Back to your dashboard
+                </a>
+            </div>
+        </main>
+    );
+}
 
 function App() {
     const path = window.location.pathname;
@@ -122,7 +157,7 @@ function App() {
         path.startsWith("/supervisor/classrooms/") &&
         role === "SUPERVISOR"
     ) {
-        return <SupervisorClassrooms />;
+        return <SupervisorClassroomDetails />;
     }
     if (
         path === "/supervisor/faults" &&
@@ -195,17 +230,11 @@ function App() {
         role !== "ADMIN"
     ) {
         return (
-            <main className="flex min-h-screen items-center justify-center bg-slate-100 px-6">
-                <div className="rounded-xl bg-white p-8 text-center shadow-sm">
-                    <h1 className="text-xl font-bold text-slate-900">
-                        Access denied
-                    </h1>
-
-                    <p className="mt-2 text-sm text-slate-500">
-                        You do not have permission to access this page.
-                    </p>
-                </div>
-            </main>
+            <StatusScreen
+                icon="lock"
+                title="Access denied"
+                message="You do not have permission to access this page."
+            />
         );
     }
 
@@ -219,17 +248,11 @@ function App() {
         role !== "SUPERVISOR"
     ) {
         return (
-            <main className="flex min-h-screen items-center justify-center bg-slate-100 px-6">
-                <div className="rounded-xl bg-white p-8 text-center shadow-sm">
-                    <h1 className="text-xl font-bold text-slate-900">
-                        Access denied
-                    </h1>
-
-                    <p className="mt-2 text-sm text-slate-500">
-                        You do not have permission to access this page.
-                    </p>
-                </div>
-            </main>
+            <StatusScreen
+                icon="lock"
+                title="Access denied"
+                message="You do not have permission to access this page."
+            />
         );
     }
 
@@ -239,17 +262,11 @@ function App() {
     // =========================
 
     return (
-        <main className="flex min-h-screen items-center justify-center bg-slate-100 px-6">
-            <div className="rounded-xl bg-white p-8 text-center shadow-sm">
-                <h1 className="text-xl font-bold text-slate-900">
-                    SIMMS
-                </h1>
-
-                <p className="mt-2 text-sm text-slate-500">
-                    This dashboard is not implemented yet.
-                </p>
-            </div>
-        </main>
+        <StatusScreen
+            icon="mapPin"
+            title="Page not found"
+            message="This page doesn't exist or hasn't been implemented yet."
+        />
     );
 }
 
