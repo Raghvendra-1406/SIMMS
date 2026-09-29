@@ -1,4 +1,9 @@
+from database.cache import TTLCache
 from database.connection import get_connection
+
+
+# get_room_by_id / get_room_by_name run on every MQTT message.
+_room_cache = TTLCache(ttl_seconds=60)
 
 
 def get_all_rooms():
@@ -28,6 +33,58 @@ def get_all_rooms():
 
 
 def get_room_by_id(room_id):
+    cached = _room_cache.get(("id", room_id))
+
+    if cached is not None:
+        return cached
+
+    room = _fetch_room_by_id(room_id)
+
+    _room_cache.set(("id", room_id), room)
+
+    return room
+
+
+def get_room_by_name(room_name):
+    """
+    Look up a room by its exact name (the MQTT topic uses names).
+    """
+
+    cached = _room_cache.get(("name", room_name))
+
+    if cached is not None:
+        return cached
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute("""
+            SELECT
+                room_id,
+                room_name,
+                room_type,
+                building,
+                floor,
+                capacity,
+                status,
+                created_at
+            FROM rooms
+            WHERE room_name = %s
+        """, (room_name,))
+
+        room = cursor.fetchone()
+
+    finally:
+        cursor.close()
+        conn.close()
+
+    _room_cache.set(("name", room_name), room)
+
+    return room
+
+
+def _fetch_room_by_id(room_id):
     conn = get_connection()
     cursor = conn.cursor()
 
@@ -96,6 +153,8 @@ def create_room(
         room = cursor.fetchone()
         conn.commit()
 
+        _room_cache.clear()
+
         return room
 
     except Exception:
@@ -152,6 +211,8 @@ def update_room(
         room = cursor.fetchone()
         conn.commit()
 
+        _room_cache.clear()
+
         return room
 
     except Exception:
@@ -176,6 +237,8 @@ def delete_room(room_id):
 
         deleted_room = cursor.fetchone()
         conn.commit()
+
+        _room_cache.clear()
 
         return deleted_room
 

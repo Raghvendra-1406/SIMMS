@@ -295,3 +295,28 @@ def update_fault_recurrence_type(fault_id, recurrence_type):
     finally:
         cursor.close()
         conn.close()
+
+def lock_fault_identity(room_id, fault_type, device_id=None):
+    """
+    Serialize fault handling for one (room, fault type, device).
+
+    Takes a transaction-level advisory lock, so it must be called
+    inside database.connection.transaction(). The lock is released
+    automatically when the transaction commits or rolls back.
+    """
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute("""
+            SELECT pg_advisory_xact_lock(
+                hashtext(%s)
+            )
+        """, (
+            f"fault:{room_id}:{fault_type}:{device_id}",
+        ))
+
+    finally:
+        cursor.close()
+        conn.close()

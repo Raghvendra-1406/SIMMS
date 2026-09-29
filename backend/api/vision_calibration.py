@@ -1,6 +1,9 @@
 from fastapi import APIRouter, HTTPException, status, Depends
 
-from dependencies.auth_dependencies import require_admin
+from dependencies.auth_dependencies import (
+    get_current_user,
+    require_admin,
+)
 
 from schemas.vision_calibration_schema import (
     VisionCalibrationData,
@@ -49,7 +52,8 @@ def create_calibration(
 
 
 @router.get(
-    "/room/{room_id}/active"
+    "/room/{room_id}/active",
+    dependencies=[Depends(get_current_user)]
 )
 def get_active_calibration(
     room_id: int

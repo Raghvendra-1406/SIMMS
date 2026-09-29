@@ -27,6 +27,17 @@ from services.ticket_service import (
     reopen_ticket,
 )
 
+from services.fan_service import (
+    get_latest_fan_motion_observation,
+    extract_fan_current,
+    extract_fan_motion,
+)
+
+from services.board_service import (
+    get_latest_board_observation,
+    extract_board_state,
+)
+
 from services.temporal_processor import (
     add_observation,
     is_recovered,
@@ -38,6 +49,7 @@ from services.temporal_processor import (
 FAULT_FAN_FAILURE = "FAN_FAILURE"
 FAULT_LIGHTS_LEFT_ON = "LIGHTS_LEFT_ON"
 FAULT_ELECTRICAL_ABNORMALITY = "ELECTRICAL_ABNORMALITY"
+FAULT_BOARD_NEEDS_CLEANING = "BOARD_NEEDS_CLEANING"
 
 
 # Separate temporal keys are used for post-repair verification.
@@ -47,6 +59,7 @@ FAULT_ELECTRICAL_ABNORMALITY = "ELECTRICAL_ABNORMALITY"
 VERIFY_FAN_FAILURE = "FAN_FAILURE_VERIFICATION"
 VERIFY_LIGHTS_LEFT_ON = "LIGHTS_LEFT_ON_VERIFICATION"
 VERIFY_ELECTRICAL_ABNORMALITY = "ELECTRICAL_ABNORMALITY_VERIFICATION"
+VERIFY_BOARD_NEEDS_CLEANING = "BOARD_NEEDS_CLEANING_VERIFICATION"
 
 
 def get_ticket(ticket_id):
@@ -92,27 +105,20 @@ def get_latest_occupancy_observation(room_id):
     )
 
 
-def get_latest_fan_motion_observation(room_id):
-    return get_latest_vision_observation(
-        room_id=room_id,
-        observation_type="FAN_MOTION"
-    )
-
-
 # ---------------------------------------------------------
 # FAN FAILURE VERIFICATION
 # ---------------------------------------------------------
 
 def verify_fan_failure(
     room_id,
-    device_name
+    device_id
 ):
     electrical_observation = get_latest_electrical_observation(
         room_id
     )
 
     vision_observation = get_latest_fan_motion_observation(
-        room_id
+        device_id
     )
 
     if (
@@ -126,18 +132,12 @@ def verify_fan_failure(
             "evidence": {}
         }
 
-    electrical_data = electrical_observation[5]
-    vision_data = vision_observation[5]
-
-    fan_current = electrical_data.get("fan_current")
-
-    fan_motion_data = vision_data.get(
-        "fan_motion",
-        {}
+    fan_current = extract_fan_current(
+        electrical_observation
     )
 
-    fan_motion = fan_motion_data.get(
-        device_name
+    fan_motion = extract_fan_motion(
+        vision_observation
     )
 
     if fan_current is None or fan_motion is None:
@@ -306,6 +306,44 @@ def verify_electrical_abnormality(room_id):
 
 
 # ---------------------------------------------------------
+# BOARD CLEANING VERIFICATION
+# ---------------------------------------------------------
+
+def verify_board_cleaning(room_id):
+    board_state = extract_board_state(
+        get_latest_board_observation(room_id)
+    )
+
+    if board_state is None:
+        return {
+            "verified": False,
+            "status": "INSUFFICIENT_DATA",
+            "is_abnormal": None,
+            "evidence": {}
+        }
+
+    # Clean, or back in normal use: the cleaning was done.
+    if board_state in {"CLEAN", "IN_USE"}:
+        return {
+            "verified": True,
+            "status": "REPAIRED",
+            "is_abnormal": False,
+            "evidence": {
+                "board_state": board_state
+            }
+        }
+
+    return {
+        "verified": False,
+        "status": "FAULT_PERSISTS",
+        "is_abnormal": True,
+        "evidence": {
+            "board_state": board_state
+        }
+    }
+
+
+# ---------------------------------------------------------
 # GET VERIFICATION TEMPORAL CONFIGURATION
 # ---------------------------------------------------------
 
@@ -318,6 +356,9 @@ def get_verification_configuration(fault_type):
 
     if fault_type == FAULT_ELECTRICAL_ABNORMALITY:
         return VERIFY_ELECTRICAL_ABNORMALITY
+
+    if fault_type == FAULT_BOARD_NEEDS_CLEANING:
+        return VERIFY_BOARD_NEEDS_CLEANING
 
     raise ValueError(
         "Unsupported fault type for verification."
@@ -365,11 +406,9 @@ def verify_ticket(
                 "Fan device not found."
             )
 
-        device_name = device[3]
-
         result = verify_fan_failure(
             room_id=room_id,
-            device_name=device_name
+            device_id=device_id
         )
 
     elif fault_type == FAULT_LIGHTS_LEFT_ON:
@@ -381,6 +420,12 @@ def verify_ticket(
     elif fault_type == FAULT_ELECTRICAL_ABNORMALITY:
 
         result = verify_electrical_abnormality(
+            room_id=room_id
+        )
+
+    elif fault_type == FAULT_BOARD_NEEDS_CLEANING:
+
+        result = verify_board_cleaning(
             room_id=room_id
         )
 

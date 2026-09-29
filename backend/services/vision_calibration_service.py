@@ -19,7 +19,30 @@ def create_vision_calibration(
             "Room does not exist."
         )
 
-    for fan in calibration_data["fans"]:
+    fans = calibration_data.get("fans") or []
+    seats = calibration_data.get("seats") or []
+    board = calibration_data.get("board")
+
+    if not fans and not seats and board is None:
+        raise ValueError(
+            "Calibration must contain at least one fan, "
+            "seat or board region."
+        )
+
+    for region in [*fans, *seats, *([board] if board else [])]:
+        if region["x2"] <= region["x1"] or region["y2"] <= region["y1"]:
+            raise ValueError(
+                "Each region must have x2 > x1 and y2 > y1."
+            )
+
+    seat_ids = [seat["seat_id"] for seat in seats]
+
+    if len(seat_ids) != len(set(seat_ids)):
+        raise ValueError(
+            "Seat IDs must be unique."
+        )
+
+    for fan in fans:
         device_id = fan["device_id"]
 
         if not device_belongs_to_room(

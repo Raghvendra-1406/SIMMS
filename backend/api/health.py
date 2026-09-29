@@ -1,4 +1,8 @@
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
+
+from dependencies.auth_dependencies import (
+    get_current_user,
+)
 
 from services.health_service import (
     get_latest_health_for_all_rooms,
@@ -7,7 +11,8 @@ from services.health_service import (
 
 router = APIRouter(
     prefix="/health",
-    tags=["Health Monitoring"]
+    tags=["Health Monitoring"],
+    dependencies=[Depends(get_current_user)]
 )
 
 

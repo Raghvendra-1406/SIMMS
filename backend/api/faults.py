@@ -1,4 +1,9 @@
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
+
+from dependencies.auth_dependencies import (
+    get_current_user,
+    require_admin,
+)
 
 from schemas.fault_schema import (
     FaultEventCreate,
@@ -10,6 +15,7 @@ from services.fault_detector import (
     FAULT_FAN_FAILURE,
     FAULT_LIGHTS_LEFT_ON,
     FAULT_ELECTRICAL_ABNORMALITY,
+    FAULT_BOARD_NEEDS_CLEANING,
     detect_fault,
 )
 
@@ -24,7 +30,8 @@ from services.fault_service import (
 
 router = APIRouter(
     prefix="/faults",
-    tags=["Fault Events"]
+    tags=["Fault Events"],
+    dependencies=[Depends(get_current_user)]
 )
 
 
@@ -32,6 +39,7 @@ ALLOWED_FAULT_TYPES = {
     FAULT_FAN_FAILURE,
     FAULT_LIGHTS_LEFT_ON,
     FAULT_ELECTRICAL_ABNORMALITY,
+    FAULT_BOARD_NEEDS_CLEANING,
 }
 
 
@@ -52,7 +60,8 @@ def fault_to_response(fault):
 
 @router.post(
     "/detect",
-    response_model=FaultEventResponse
+    response_model=FaultEventResponse,
+    dependencies=[Depends(require_admin)]
 )
 def detect_fault_endpoint(
     fault: FaultEventCreate
@@ -165,7 +174,8 @@ def get_fault_endpoint(
 
 @router.patch(
     "/{fault_id}/status",
-    response_model=FaultEventResponse
+    response_model=FaultEventResponse,
+    dependencies=[Depends(require_admin)]
 )
 def update_fault_status_endpoint(
     fault_id: int,

@@ -1,9 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from schemas.room_schema import (
+    RoomCommand,
     RoomCreate,
     RoomResponse,
     RoomUpdate,
+)
+
+from mqtt.subscriber import (
+    publish_command,
 )
 
 from services.room_service import (
@@ -17,6 +22,7 @@ from services.room_service import (
 
 from dependencies.auth_dependencies import (
     require_admin,
+    require_admin_or_supervisor,
     get_current_user,
 )
 
@@ -208,3 +214,48 @@ def delete_classroom(
             detail=str(exc)
         )
 
+
+@router.post(
+    "/{room_id}/commands",
+    status_code=status.HTTP_202_ACCEPTED
+)
+def send_classroom_command(
+    room_id: int,
+    command: RoomCommand,
+    current_user=Depends(require_admin_or_supervisor)
+):
+    """
+    Switch the room's demo-panel lamp or fan relay.
+    The node applies it and reports the new relay state in its
+    next status message, which the live monitor then shows.
+    """
+
+    try:
+        room = get_room(room_id)
+
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc)
+        )
+
+    payload = {
+        "target": command.target,
+        "state": command.state,
+        "requested_by": current_user["user_id"],
+    }
+
+    try:
+        publish_command(room[1], payload)
+
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc)
+        )
+
+    return {
+        "message": "Command sent to the classroom node.",
+        "room_name": room[1],
+        "command": payload,
+    }

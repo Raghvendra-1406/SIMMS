@@ -1,4 +1,8 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
+
+from dependencies.auth_dependencies import (
+    get_current_user,
+)
 
 from schemas.ticket_history_schema import (
     TicketHistoryResponse,
@@ -13,7 +17,8 @@ from services.ticket_history_service import (
 
 router = APIRouter(
     prefix="/ticket-history",
-    tags=["Ticket History"]
+    tags=["Ticket History"],
+    dependencies=[Depends(get_current_user)]
 )
 
 

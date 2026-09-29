@@ -1,4 +1,5 @@
 import json
+import uuid
 from datetime import datetime, timezone
 
 import paho.mqtt.client as mqtt
@@ -8,57 +9,71 @@ from config.settings import (
     MQTT_BROKER_PORT,
 )
 
-from mqtt.topics import vision_topic
-
-from database.repositories.room_repository import (
-    get_room_by_id,
+from mqtt.topics import (
+    status_topic,
+    vision_topic,
 )
+
+
+CAMERA_DEVICE_NAME = "Camera"
 
 
 class VisionPublisher:
     """
-    Publishes vision observations to the SIMMS MQTT broker.
+    Publishes vision observations and camera status to MQTT.
+
+    Message shapes match the ESP32 virtual camera
+    (firmware/simms_node) and backend/scripts/fake_node.py.
 
     Responsibilities:
-    - Connect to the MQTT broker
-    - Convert room_id to room_name
-    - Publish occupancy observations
-    - Publish fan motion observations
+    - Connect to the MQTT broker, with a last-will OFFLINE status
+    - Publish occupancy, board and per-fan motion observations
+    - Publish ONLINE / OFFLINE camera status
 
     Does NOT:
-    - Access the camera
-    - Access vision models
-    - Load calibration
-    - Write directly to PostgreSQL
-    - Perform fault confirmation
-    - Create faults
-    - Create tickets
+    - Access the camera or vision models
+    - Write to PostgreSQL
+    - Perform fault confirmation or create tickets
     """
 
     def __init__(
         self,
+        room_name,
+        node_id=None,
         broker_host=MQTT_BROKER_HOST,
         broker_port=MQTT_BROKER_PORT
     ):
+        self.room_name = room_name
+        self.node_id = node_id or f"camera-{room_name}"
+
         self.broker_host = broker_host
         self.broker_port = broker_port
 
-        self.client = mqtt.Client()
+        self.client = mqtt.Client(
+            callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
+            client_id=f"{self.node_id}-{uuid.uuid4().hex[:6]}",
+        )
+
+        # If the runtime dies, the broker reports the camera OFFLINE.
+        self.client.will_set(
+            status_topic(room_name, self.node_id),
+            json.dumps({"state": "OFFLINE", "kind": "CAMERA"}),
+            qos=1,
+            retain=True,
+        )
+
+        self.client.reconnect_delay_set(min_delay=1, max_delay=30)
 
         self.connected = False
 
     def connect(self):
-        """
-        Connect to the MQTT broker.
-        """
-
         if self.connected:
             return
 
         self.client.connect(
             self.broker_host,
             self.broker_port,
-            60
+            keepalive=30
         )
 
         self.client.loop_start()
@@ -67,32 +82,31 @@ class VisionPublisher:
 
         print(
             f"Vision MQTT publisher connected to "
-            f"{self.broker_host}:{self.broker_port}"
+            f"{self.broker_host}:{self.broker_port} as {self.node_id}"
         )
 
-    def publish_vision_result(
-        self,
-        vision_result
-    ):
-        """
-        Convert and publish a VisionRuntime result.
+    def publish_status(self, online, **details):
+        self._publish(
+            status_topic(self.room_name, self.node_id),
+            {
+                "state": "ONLINE" if online else "OFFLINE",
+                "kind": "CAMERA",
+                **details,
+            },
+            retain=True,
+        )
 
-        Expected input:
+    def publish_vision_result(self, vision_result):
+        """
+        Publish one VisionRuntime result:
 
         {
-            "room_id": 1,
             "calibration_version": 1,
-            "occupancy": {
-                "person_count": 3
-            },
-            "fans": [
-                {
-                    "device_id": 10,
-                    "running": False,
-                    "motion_score": 0.01,
-                    "confidence": 0.91
-                }
-            ]
+            "occupancy": {"person_count": 3, "total_seats": 40, ...},
+            "fans": [{"device_id": 10, "running": False,
+                      "motion_score": 0.01, "confidence": 0.91}],
+            "board": {"state": "DIRTY", "ink_ratio": 0.31,
+                      "confidence": 1.0} or None
         }
         """
 
@@ -101,127 +115,71 @@ class VisionPublisher:
                 "MQTT publisher is not connected."
             )
 
-        room_id = vision_result.get(
-            "room_id"
-        )
+        topic = vision_topic(self.room_name)
 
-        if room_id is None:
-            raise ValueError(
-                "Vision result does not contain room_id."
-            )
-
-        room = get_room_by_id(
-            room_id
-        )
-
-        if room is None:
-            raise ValueError(
-                f"Room {room_id} does not exist."
-            )
-
-        room_name = room[1]
-
-        topic = vision_topic(
-            room_name
-        )
-
-        calibration_version = (
-            vision_result.get(
+        common = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "node_id": self.node_id,
+            "calibration_version": vision_result.get(
                 "calibration_version"
-            )
-        )
+            ),
+        }
 
-        timestamp = datetime.now(
-            timezone.utc
-        ).isoformat()
-
-        # -------------------------
-        # OCCUPANCY
-        # -------------------------
-
-        occupancy = vision_result.get(
-            "occupancy",
-            {}
-        )
-
-        person_count = occupancy.get(
-            "person_count"
-        )
+        occupancy = vision_result.get("occupancy", {})
+        person_count = occupancy.get("person_count")
 
         if person_count is not None:
-
-            occupancy_payload = {
-                "timestamp": timestamp,
+            payload = {
+                **common,
+                "device_name": CAMERA_DEVICE_NAME,
                 "occupancy_count": person_count,
-                "calibration_version": (
-                    calibration_version
-                )
             }
 
-            self._publish(
-                topic=topic,
-                payload=occupancy_payload
-            )
+            for key in (
+                "total_seats",
+                "occupied_seats",
+                "empty_seats",
+                "occupancy_ratio",
+                "seat_states",
+            ):
+                if key in occupancy:
+                    payload[key] = occupancy[key]
 
-        # -------------------------
-        # FAN MOTION
-        # -------------------------
+            self._publish(topic, payload)
 
-        fans = vision_result.get(
-            "fans",
-            []
-        )
+        board = vision_result.get("board")
 
-        for fan in fans:
+        if board is not None:
+            self._publish(topic, {
+                **common,
+                "device_name": CAMERA_DEVICE_NAME,
+                "board": board,
+            })
 
-            device_id = fan.get(
-                "device_id"
-            )
+        for fan in vision_result.get("fans", []):
+            device_id = fan.get("device_id")
 
             if device_id is None:
                 continue
 
-            fan_payload = {
-                "timestamp": timestamp,
+            self._publish(topic, {
+                **common,
                 "device_id": device_id,
                 "fan_motion": {
-                    "running": fan.get(
-                        "running"
-                    ),
-                    "motion_score": fan.get(
-                        "motion_score"
-                    ),
-                    "confidence": fan.get(
-                        "confidence"
-                    )
+                    "running": fan.get("running"),
+                    "motion_score": fan.get("motion_score"),
+                    "confidence": fan.get("confidence"),
                 },
-                "calibration_version": (
-                    calibration_version
-                )
-            }
+            })
 
-            self._publish(
-                topic=topic,
-                payload=fan_payload
-            )
-
-    def _publish(
-        self,
-        topic,
-        payload
-    ):
-        """
-        Publish one JSON message to MQTT.
-        """
-
-        message = json.dumps(
-            payload
-        )
+    def _publish(self, topic, payload, retain=False):
+        message = json.dumps(payload)
 
         result = self.client.publish(
             topic,
             message,
-            qos=1
+            qos=1,
+            retain=retain,
         )
 
         if result.rc != mqtt.MQTT_ERR_SUCCESS:
@@ -230,25 +188,16 @@ class VisionPublisher:
                 f"Return code: {result.rc}"
             )
 
-        print(
-            f"Vision message published to "
-            f"{topic}: {message}"
-        )
-
-    def disconnect(self):
-        """
-        Disconnect from the MQTT broker.
-        """
-
+    def disconnect(self, publish_offline=True):
         if not self.connected:
             return
 
-        self.client.loop_stop()
+        if publish_offline:
+            self.publish_status(False)
 
+        self.client.loop_stop()
         self.client.disconnect()
 
         self.connected = False
 
-        print(
-            "Vision MQTT publisher disconnected."
-        )
+        print("Vision MQTT publisher disconnected.")

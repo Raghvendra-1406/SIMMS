@@ -3,7 +3,7 @@ from database.repositories.sensor_repository import (
 )
 
 from database.repositories.vision_repository import (
-    get_latest_vision_observation,
+    get_latest_device_vision_observation,
 )
 
 from database.repositories.device_repository import (
@@ -12,6 +12,10 @@ from database.repositories.device_repository import (
 
 from database.repositories.room_repository import (
     get_room_by_id,
+)
+
+from config.settings import (
+    MIN_VOTE_CONFIDENCE,
 )
 
 
@@ -54,9 +58,11 @@ def get_latest_electrical_observation(room_id):
     )
 
 
-def get_latest_fan_motion_observation(room_id):
-    return get_latest_vision_observation(
-        room_id=room_id,
+def get_latest_fan_motion_observation(device_id):
+    # The vision runtime publishes one FAN_MOTION message per fan,
+    # so the latest row must be looked up per device, not per room.
+    return get_latest_device_vision_observation(
+        device_id=device_id,
         observation_type="FAN_MOTION"
     )
 
@@ -70,7 +76,20 @@ def extract_fan_current(observation):
     return observation_data.get("fan_current")
 
 
-def extract_fan_motion(observation, device_name):
+def extract_fan_motion(observation):
+    """
+    Read the running flag from a FAN_MOTION observation.
+
+    The vision runtime publishes:
+        {"fan_motion": {"running", "motion_score", "confidence"}}
+
+    confidence == 0 means the detector had no usable frame
+    (first frame after start-up or an invalid ROI), so the
+    observation is treated as unknown rather than "not running".
+    Any confidence below MIN_VOTE_CONFIDENCE is treated the same
+    way, so it does not vote (Plan v2 §7.1).
+    """
+
     if observation is None:
         return None
 
@@ -81,7 +100,15 @@ def extract_fan_motion(observation, device_name):
     if not isinstance(fan_motion, dict):
         return None
 
-    return fan_motion.get(device_name)
+    running = fan_motion.get("running")
+
+    if running is None:
+        return None
+
+    if (fan_motion.get("confidence") or 0) < MIN_VOTE_CONFIDENCE:
+        return None
+
+    return bool(running)
 
 
 def evaluate_fan_status(
@@ -90,7 +117,7 @@ def evaluate_fan_status(
 ):
     validate_room_exists(room_id)
 
-    device = validate_device_belongs_to_room(
+    validate_device_belongs_to_room(
         room_id=room_id,
         device_id=device_id
     )
@@ -100,7 +127,7 @@ def evaluate_fan_status(
     )
 
     vision_observation = get_latest_fan_motion_observation(
-        room_id
+        device_id
     )
 
     fan_current = extract_fan_current(
@@ -108,8 +135,7 @@ def evaluate_fan_status(
     )
 
     fan_motion = extract_fan_motion(
-        vision_observation,
-        device[3]
+        vision_observation
     )
 
     if fan_current is None or fan_motion is None:

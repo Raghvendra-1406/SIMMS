@@ -3,6 +3,8 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from services.jwt_service import decode_access_token
 
+from database.repositories.user_repository import get_user_by_id
+
 
 security = HTTPBearer()
 
@@ -21,19 +23,33 @@ def get_current_user(
         )
 
     user_id = payload.get("sub")
-    role = payload.get("role")
 
-    if user_id is None or role is None:
+    try:
+        user_id = int(user_id)
+
+    except (TypeError, ValueError):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authentication token."
         )
 
+    # The token only proves who the caller is. Role and active
+    # status are read from the database on every request, so a
+    # deactivated or demoted user loses access immediately
+    # instead of when the token expires.
+    user = get_user_by_id(user_id)
+
+    if user is None or not user[6]:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User account is inactive or no longer exists."
+        )
+
     return {
-        "user_id": int(user_id),
-        "name": payload.get("name"),
-        "email": payload.get("email"),
-        "role": role
+        "user_id": user[0],
+        "name": user[1],
+        "email": user[2],
+        "role": user[4]
     }
 
 

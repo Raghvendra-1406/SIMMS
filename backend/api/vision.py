@@ -1,4 +1,9 @@
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
+
+from dependencies.auth_dependencies import (
+    get_current_user,
+    require_admin,
+)
 
 from schemas.vision_schema import (
     VisionObservationCreate,
@@ -17,12 +22,14 @@ from services.vision_service import (
 
 router = APIRouter(
     prefix="/vision",
-    tags=["Vision Observations"]
+    tags=["Vision Observations"],
+    dependencies=[Depends(get_current_user)]
 )
 
 
 @router.post(
     "",
+    dependencies=[Depends(require_admin)],
     response_model=VisionObservationResponse,
     status_code=status.HTTP_201_CREATED
 )

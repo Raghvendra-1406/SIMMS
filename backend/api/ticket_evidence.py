@@ -1,4 +1,8 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
+
+from dependencies.auth_dependencies import (
+    get_current_user,
+)
 
 from schemas.ticket_evidence_schema import (
     TicketEvidenceResponse,
@@ -14,7 +18,8 @@ from services.ticket_evidence_service import (
 
 router = APIRouter(
     prefix="/ticket-evidence",
-    tags=["Ticket Evidence"]
+    tags=["Ticket Evidence"],
+    dependencies=[Depends(get_current_user)]
 )
 
 

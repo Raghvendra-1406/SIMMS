@@ -16,6 +16,14 @@ from database.repositories.room_repository import get_room_by_id
 ALLOWED_OBSERVATION_TYPES = {
     "OCCUPANCY",
     "FAN_MOTION",
+    "BOARD",
+}
+
+BOARD_STATES = {
+    "CLEAN",
+    "IN_USE",
+    "DIRTY",
+    "OCCLUDED",
 }
 
 
@@ -23,7 +31,7 @@ def validate_observation_type(observation_type):
     if observation_type not in ALLOWED_OBSERVATION_TYPES:
         raise ValueError(
             "Invalid observation type. Allowed values are "
-            "OCCUPANCY and FAN_MOTION."
+            "OCCUPANCY, FAN_MOTION and BOARD."
         )
 
 
@@ -86,6 +94,24 @@ def validate_fan_motion_data(observation_data):
         )
 
 
+def validate_board_data(observation_data):
+    board = observation_data.get("board")
+
+    if not isinstance(board, dict):
+        raise ValueError(
+            "Board observation must contain a board object."
+        )
+
+    state = board.get("state")
+
+    # None is allowed: the detector could not measure the frame.
+    if state is not None and state not in BOARD_STATES:
+        raise ValueError(
+            "Invalid board state. Allowed values are "
+            "CLEAN, IN_USE, DIRTY and OCCLUDED."
+        )
+
+
 def validate_observation_data(
     observation_type,
     observation_data
@@ -105,6 +131,9 @@ def validate_observation_data(
 
     elif observation_type == "FAN_MOTION":
         validate_fan_motion_data(observation_data)
+
+    elif observation_type == "BOARD":
+        validate_board_data(observation_data)
 
 
 def create_observation(

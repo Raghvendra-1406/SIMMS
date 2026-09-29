@@ -228,7 +228,8 @@ def update_device_status_endpoint(
 
 @router.patch(
     "/{device_id}/seen",
-    response_model=DeviceResponse
+    response_model=DeviceResponse,
+    dependencies=[Depends(require_admin)]
 )
 def mark_device_seen_endpoint(device_id: int):
     try:
