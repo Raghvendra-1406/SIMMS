@@ -16,6 +16,10 @@ DB_USER = os.getenv("DB_USER")
 
 DB_PASSWORD = os.getenv("DB_PASSWORD")
 
+# Full connection string (e.g. from Neon). When set, it is
+# used instead of the separate DB_* values above.
+DATABASE_URL = os.getenv("DATABASE_URL")
+
 
 MQTT_BROKER_HOST = os.getenv(
     "MQTT_BROKER_HOST",

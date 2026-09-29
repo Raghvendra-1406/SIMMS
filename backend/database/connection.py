@@ -8,7 +8,8 @@ from config.settings import (
     DB_PORT,
     DB_NAME,
     DB_USER,
-    DB_PASSWORD
+    DB_PASSWORD,
+    DATABASE_URL
 )
 
 
@@ -47,6 +48,9 @@ class _SharedConnection:
 
 
 def _connect():
+    if DATABASE_URL:
+        return psycopg2.connect(DATABASE_URL)
+
     return psycopg2.connect(
         host=DB_HOST,
         port=DB_PORT,

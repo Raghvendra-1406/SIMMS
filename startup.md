@@ -8,13 +8,17 @@ Smart classroom monitoring: detects fan failures, lights left on in empty rooms,
 |---|---|---|
 | Python | 3.10+ | Backend |
 | Node.js | 20.19+ or 22.12+ | Frontend |
-| PostgreSQL | any recent | Database |
+| PostgreSQL | 16+ | Database |
 | Mosquitto (MQTT broker) | any | Receives sensor/camera data |
 
 ## 2. Database
 
 1. Create a database, e.g. `simms`.
-2. Create the tables. **Note:** the repo does not contain a schema file yet, so get it from the project owner.
+2. Create the tables (run from the project root, on an empty database):
+
+```powershell
+psql -U postgres -d simms -f backend/database/schema.sql
+```
 
 ## 3. Backend (port 8000)
 
@@ -22,7 +26,7 @@ Smart classroom monitoring: detects fan failures, lights left on in empty rooms,
 cd backend
 python -m venv venv
 venv\Scripts\activate
-pip install fastapi uvicorn psycopg2-binary "python-jose[cryptography]" bcrypt paho-mqtt python-dotenv email-validator python-multipart
+pip install -r requirements.txt
 copy .env.example .env
 ```
 

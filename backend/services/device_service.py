@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from database.repositories.device_repository import (
     create_device,
@@ -155,7 +155,7 @@ def mark_device_seen(device_id):
 
     return update_device_last_seen(
         device_id=device_id,
-        last_seen=datetime.now()
+        last_seen=datetime.now(timezone.utc)
     )
 
 
