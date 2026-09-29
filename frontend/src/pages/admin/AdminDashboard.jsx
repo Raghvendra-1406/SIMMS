@@ -13,6 +13,7 @@ import {
 } from "../../components/ui";
 import { formatLabel, formatConfidence } from "../../lib/format";
 import { navigateTo } from "../../lib/session";
+import { usePolling } from "../../lib/usePolling";
 
 const API_BASE_URL = "http://localhost:8000";
 
@@ -94,9 +95,9 @@ export default function AdminDashboard() {
   const adminName =
     localStorage.getItem("name") || "Administrator";
 
-  const loadDashboardData = async () => {
+  const loadDashboardData = async ({ silent = false } = {}) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       setError("");
 
       const headers = getAuthHeaders();
@@ -211,6 +212,9 @@ export default function AdminDashboard() {
   useEffect(() => {
     loadDashboardData();
   }, []);
+
+  // Keep the page in sync with live data without flashing skeletons.
+  usePolling(loadDashboardData, 10000);
 
   const activeClassrooms = classrooms.filter(
     (classroom) => classroom.status === "ACTIVE"

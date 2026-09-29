@@ -107,6 +107,13 @@ function App() {
     }
 
     if (
+        path === "/admin/monitoring" &&
+        role === "ADMIN"
+    ) {
+        return <SupervisorMonitoring />;
+    }
+
+    if (
         path === "/admin/calibration" &&
         role === "ADMIN"
     ) {

@@ -15,6 +15,7 @@ const NAVIGATION = {
         title: "Overview",
         items: [
           { label: "Dashboard", icon: "dashboard", path: "/admin/dashboard" },
+          { label: "Live monitor", icon: "activity", path: "/admin/monitoring" },
         ],
       },
       {
@@ -40,7 +41,7 @@ const NAVIGATION = {
         items: [
           { label: "Dashboard", icon: "dashboard", path: "/supervisor/dashboard" },
           { label: "Classrooms", icon: "classroom", path: "/supervisor/classrooms" },
-          { label: "Monitoring", icon: "activity", path: "/supervisor/monitoring" },
+          { label: "Live monitor", icon: "activity", path: "/supervisor/monitoring" },
         ],
       },
       {
@@ -317,19 +318,29 @@ export default function AppShell({ title, eyebrow, backHref, actions, unreadCoun
     let cancelled = false;
     const token = localStorage.getItem("access_token");
 
-    fetch(`${API_BASE_URL}/notifications/unread`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((response) => (response.ok ? response.json() : null))
-      .then((data) => {
-        if (cancelled || !data) return;
-        const count = Array.isArray(data) ? data.length : Number(data.count ?? data.unread_count ?? 0);
-        setFetchedUnread(Number.isFinite(count) ? count : 0);
+    // Refreshed periodically so new-ticket notifications show up
+    // without reloading the page.
+    const fetchUnread = () => {
+      if (document.hidden) return;
+
+      fetch(`${API_BASE_URL}/notifications/unread`, {
+        headers: { Authorization: `Bearer ${token}` },
       })
-      .catch(() => {});
+        .then((response) => (response.ok ? response.json() : null))
+        .then((data) => {
+          if (cancelled || !data) return;
+          const count = Array.isArray(data) ? data.length : Number(data.count ?? data.unread_count ?? 0);
+          setFetchedUnread(Number.isFinite(count) ? count : 0);
+        })
+        .catch(() => {});
+    };
+
+    fetchUnread();
+    const timer = setInterval(fetchUnread, 15000);
 
     return () => {
       cancelled = true;
+      clearInterval(timer);
     };
   }, [role, unreadCount]);
 

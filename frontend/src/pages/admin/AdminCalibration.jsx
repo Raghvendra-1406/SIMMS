@@ -36,12 +36,56 @@ function formatDate(value) {
 
 const CALIBRATION_STEPS = [
   "Select a classroom.",
-  "Upload the camera image.",
-  "Select a fan device.",
-  "Click and drag over the fan.",
+  "Upload a camera image of the empty classroom.",
+  "Choose what to draw: the board, a seat, or a fan.",
+  "Click and drag over that area. Draw one box per seat or bench.",
   "The rectangle appears live while you drag.",
   "Save the calibration.",
 ];
+
+const BOARD_TARGET = "board";
+const SEAT_TARGET = "seat";
+const FAN_TARGET_PREFIX = "fan:";
+
+/*
+ * Seat IDs are assigned in order: seat_01, seat_02, ...
+ * Gaps left by removed seats are reused first.
+ */
+function getNextSeatId(seats) {
+  const usedIds = new Set(
+    seats.map((seat) => seat.seat_id)
+  );
+
+  let number = 1;
+
+  while (
+    usedIds.has(
+      `seat_${String(number).padStart(2, "0")}`
+    )
+  ) {
+    number += 1;
+  }
+
+  return `seat_${String(number).padStart(2, "0")}`;
+}
+
+function makeBox(start, point) {
+  return {
+    x1: Math.min(start.x, point.x),
+    y1: Math.min(start.y, point.y),
+    x2: Math.max(start.x, point.x),
+    y2: Math.max(start.y, point.y),
+  };
+}
+
+function toSavedBox(box) {
+  return {
+    x1: Math.round(Number(box.x1)),
+    y1: Math.round(Number(box.y1)),
+    x2: Math.round(Number(box.x2)),
+    y2: Math.round(Number(box.y2)),
+  };
+}
 
 export default function AdminCalibration() {
   const [classrooms, setClassrooms] = useState([]);
@@ -50,7 +94,11 @@ export default function AdminCalibration() {
   const [selectedRoomId, setSelectedRoomId] =
     useState("");
 
-  const [selectedDeviceId, setSelectedDeviceId] =
+  /*
+   * What the next drawn box becomes:
+   * "board", "seat", or "fan:<device_id>".
+   */
+  const [drawTarget, setDrawTarget] =
     useState("");
 
   const [imageFile, setImageFile] =
@@ -63,6 +111,15 @@ export default function AdminCalibration() {
     useState("");
 
   const [fanBoxes, setFanBoxes] =
+    useState([]);
+
+  const [boardBox, setBoardBox] =
+    useState(null);
+
+  const [boardType, setBoardType] =
+    useState("WHITEBOARD");
+
+  const [seatBoxes, setSeatBoxes] =
     useState([]);
 
   const [activeCalibration, setActiveCalibration] =
@@ -93,6 +150,9 @@ export default function AdminCalibration() {
     useState(null);
 
   const imageRef = useRef(null);
+
+  const [imageSize, setImageSize] =
+    useState(null);
 
   /*
    * ---------------------------------------------------------
@@ -219,6 +279,8 @@ export default function AdminCalibration() {
       if (response.status === 404) {
         setActiveCalibration(null);
         setFanBoxes([]);
+        setBoardBox(null);
+        setSeatBoxes([]);
         setSavedImagePath("");
         return;
       }
@@ -269,6 +331,27 @@ export default function AdminCalibration() {
           ? savedFans
           : []
       );
+
+      const savedBoard =
+        calibration?.calibration_data
+          ?.board || null;
+
+      setBoardBox(savedBoard);
+
+      setBoardType(
+        savedBoard?.board_type ||
+          "WHITEBOARD"
+      );
+
+      const savedSeats =
+        calibration?.calibration_data
+          ?.seats || [];
+
+      setSeatBoxes(
+        Array.isArray(savedSeats)
+          ? savedSeats
+          : []
+      );
     } catch (err) {
       setError(
         err.message ||
@@ -292,13 +375,15 @@ export default function AdminCalibration() {
       event.target.value;
 
     setSelectedRoomId(roomId);
-    setSelectedDeviceId("");
+    setDrawTarget("");
 
     setImageFile(null);
     setImageUrl("");
     setSavedImagePath("");
 
     setFanBoxes([]);
+    setBoardBox(null);
+    setSeatBoxes([]);
     setCurrentBox(null);
     setActiveCalibration(null);
 
@@ -347,6 +432,8 @@ export default function AdminCalibration() {
      * a new calibration.
      */
     setFanBoxes([]);
+    setBoardBox(null);
+    setSeatBoxes([]);
     setCurrentBox(null);
     setActiveCalibration(null);
     setSavedImagePath("");
@@ -439,9 +526,9 @@ export default function AdminCalibration() {
       return;
     }
 
-    if (!selectedDeviceId) {
+    if (!drawTarget) {
       setError(
-        "Select a fan device before drawing its area."
+        "Choose what to draw before drawing an area."
       );
       return;
     }
@@ -464,14 +551,9 @@ export default function AdminCalibration() {
      * This makes the rectangle
      * appear immediately.
      */
-    setCurrentBox({
-      device_id:
-        Number(selectedDeviceId),
-      x1: point.x,
-      y1: point.y,
-      x2: point.x,
-      y2: point.y,
-    });
+    setCurrentBox(
+      makeBox(point, point)
+    );
   };
 
   /*
@@ -506,30 +588,9 @@ export default function AdminCalibration() {
      * Therefore the rectangle is LIVE.
      */
 
-    setCurrentBox({
-      device_id:
-        Number(selectedDeviceId),
-
-      x1: Math.min(
-        drawStart.x,
-        point.x
-      ),
-
-      y1: Math.min(
-        drawStart.y,
-        point.y
-      ),
-
-      x2: Math.max(
-        drawStart.x,
-        point.x
-      ),
-
-      y2: Math.max(
-        drawStart.y,
-        point.y
-      ),
-    });
+    setCurrentBox(
+      makeBox(drawStart, point)
+    );
   };
 
   /*
@@ -559,69 +620,82 @@ export default function AdminCalibration() {
       return;
     }
 
-    const finalBox = {
-      device_id:
-        Number(selectedDeviceId),
+    commitBox(
+      makeBox(drawStart, point)
+    );
+  };
 
-      x1: Math.min(
-        drawStart.x,
-        point.x
-      ),
+  /*
+   * ---------------------------------------------------------
+   * STORE A FINISHED BOX FOR THE DRAW TARGET
+   * ---------------------------------------------------------
+   */
 
-      y1: Math.min(
-        drawStart.y,
-        point.y
-      ),
-
-      x2: Math.max(
-        drawStart.x,
-        point.x
-      ),
-
-      y2: Math.max(
-        drawStart.y,
-        point.y
-      ),
-    };
+  const commitBox = (box) => {
+    setCurrentBox(null);
 
     /*
      * Ignore tiny accidental clicks.
      */
     if (
-      Math.abs(
-        finalBox.x2 -
-          finalBox.x1
-      ) < 10 ||
-      Math.abs(
-        finalBox.y2 -
-          finalBox.y1
-      ) < 10
+      box.x2 - box.x1 < 10 ||
+      box.y2 - box.y1 < 10
     ) {
-      setCurrentBox(null);
       setError(
-        "Please draw a larger fan area."
+        "Please draw a larger area."
       );
       return;
     }
 
-    /*
-     * Replace an existing box for the
-     * same fan device.
-     */
-    setFanBoxes((previous) => [
-      ...previous.filter(
-        (box) =>
-          Number(box.device_id) !==
-          Number(finalBox.device_id)
-      ),
-      finalBox,
-    ]);
+    if (drawTarget === BOARD_TARGET) {
+      setBoardBox(box);
 
-    setCurrentBox(null);
+      setSuccess(
+        "Board area selected. Drawing again replaces it."
+      );
+      return;
+    }
 
-    setSuccess(
-      "Fan area selected. You can draw another fan area or save the calibration."
-    );
+    if (drawTarget === SEAT_TARGET) {
+      setSeatBoxes((previous) => [
+        ...previous,
+        {
+          seat_id: getNextSeatId(previous),
+          ...box,
+        },
+      ]);
+
+      setSuccess(
+        "Seat added. Keep drawing to add the next seat."
+      );
+      return;
+    }
+
+    if (drawTarget.startsWith(FAN_TARGET_PREFIX)) {
+      const deviceId = Number(
+        drawTarget.slice(FAN_TARGET_PREFIX.length)
+      );
+
+      /*
+       * Replace an existing box for the
+       * same fan device.
+       */
+      setFanBoxes((previous) => [
+        ...previous.filter(
+          (fanBox) =>
+            Number(fanBox.device_id) !==
+            deviceId
+        ),
+        {
+          device_id: deviceId,
+          ...box,
+        },
+      ]);
+
+      setSuccess(
+        "Fan area selected. You can draw another area or save the calibration."
+      );
+    }
   };
 
   /*
@@ -699,9 +773,9 @@ export default function AdminCalibration() {
   const handleTouchStart = (
     event
   ) => {
-    if (!selectedDeviceId) {
+    if (!drawTarget) {
       setError(
-        "Select a fan device before drawing its area."
+        "Choose what to draw before drawing an area."
       );
       return;
     }
@@ -720,14 +794,9 @@ export default function AdminCalibration() {
     setIsDrawing(true);
     setDrawStart(point);
 
-    setCurrentBox({
-      device_id:
-        Number(selectedDeviceId),
-      x1: point.x,
-      y1: point.y,
-      x2: point.x,
-      y2: point.y,
-    });
+    setCurrentBox(
+      makeBox(point, point)
+    );
   };
 
   const handleTouchMove = (
@@ -751,30 +820,9 @@ export default function AdminCalibration() {
       return;
     }
 
-    setCurrentBox({
-      device_id:
-        Number(selectedDeviceId),
-
-      x1: Math.min(
-        drawStart.x,
-        point.x
-      ),
-
-      y1: Math.min(
-        drawStart.y,
-        point.y
-      ),
-
-      x2: Math.max(
-        drawStart.x,
-        point.x
-      ),
-
-      y2: Math.max(
-        drawStart.y,
-        point.y
-      ),
-    });
+    setCurrentBox(
+      makeBox(drawStart, point)
+    );
   };
 
   const handleTouchEnd = () => {
@@ -789,36 +837,7 @@ export default function AdminCalibration() {
     setIsDrawing(false);
     setDrawStart(null);
 
-    if (
-      Math.abs(
-        currentBox.x2 -
-          currentBox.x1
-      ) < 10 ||
-      Math.abs(
-        currentBox.y2 -
-          currentBox.y1
-      ) < 10
-    ) {
-      setCurrentBox(null);
-      return;
-    }
-
-    setFanBoxes((previous) => [
-      ...previous.filter(
-        (box) =>
-          Number(box.device_id) !==
-          Number(
-            currentBox.device_id
-          )
-      ),
-      currentBox,
-    ]);
-
-    setCurrentBox(null);
-
-    setSuccess(
-      "Fan area selected."
-    );
+    commitBox(currentBox);
   };
 
   /*
@@ -835,6 +854,14 @@ export default function AdminCalibration() {
         (box) =>
           Number(box.device_id) !==
           Number(deviceId)
+      )
+    );
+  };
+
+  const removeSeatBox = (seatId) => {
+    setSeatBoxes((previous) =>
+      previous.filter(
+        (box) => box.seat_id !== seatId
       )
     );
   };
@@ -861,6 +888,29 @@ export default function AdminCalibration() {
     );
   };
 
+  const getDrawTargetLabel = () => {
+    if (drawTarget === BOARD_TARGET) {
+      return "Board";
+    }
+
+    if (drawTarget === SEAT_TARGET) {
+      return getNextSeatId(seatBoxes);
+    }
+
+    if (drawTarget.startsWith(FAN_TARGET_PREFIX)) {
+      return getDeviceName(
+        drawTarget.slice(FAN_TARGET_PREFIX.length)
+      );
+    }
+
+    return "";
+  };
+
+  const regionCount =
+    fanBoxes.length +
+    seatBoxes.length +
+    (boardBox ? 1 : 0);
+
   /*
    * ---------------------------------------------------------
    * CONVERT ORIGINAL IMAGE COORDINATES
@@ -871,25 +921,19 @@ export default function AdminCalibration() {
   const getDisplayBoxStyle = (
     box
   ) => {
-    const image =
-      imageRef.current;
-
-    if (!image) {
+    /*
+     * Natural size is captured on image load, so rendering
+     * does not read the image element through the ref.
+     */
+    if (!imageSize) {
       return {};
     }
 
     const naturalWidth =
-      image.naturalWidth;
+      imageSize.width;
 
     const naturalHeight =
-      image.naturalHeight;
-
-    if (
-      !naturalWidth ||
-      !naturalHeight
-    ) {
-      return {};
-    }
+      imageSize.height;
 
     const left =
       (box.x1 / naturalWidth) *
@@ -938,9 +982,9 @@ export default function AdminCalibration() {
       return;
     }
 
-    if (fanBoxes.length === 0) {
+    if (regionCount === 0) {
       setError(
-        "Please draw at least one fan area."
+        "Please draw at least one board, seat or fan area."
       );
       return;
     }
@@ -994,13 +1038,23 @@ export default function AdminCalibration() {
           (box) => ({
             device_id:
               Number(box.device_id),
-
-            x1: Math.round(Number(box.x1)),
-            y1: Math.round(Number(box.y1)),
-            x2: Math.round(Number(box.x2)),
-            y2: Math.round(Number(box.y2)),
+            ...toSavedBox(box),
           })
         ),
+
+        seats: seatBoxes.map(
+          (box) => ({
+            seat_id: box.seat_id,
+            ...toSavedBox(box),
+          })
+        ),
+
+        board: boardBox
+          ? {
+              ...toSavedBox(boardBox),
+              board_type: boardType,
+            }
+          : null,
       };
 
       const response =
@@ -1071,6 +1125,46 @@ export default function AdminCalibration() {
   );
 
   /*
+   * Every drawn area, in one list for the side panel.
+   */
+  const regionItems = [
+    ...(boardBox
+      ? [
+          {
+            key: "board",
+            label: `Board · ${
+              boardType === "BLACKBOARD"
+                ? "blackboard"
+                : "whiteboard"
+            }`,
+            icon: "clipboard",
+            iconClass: "bg-violet-50 text-violet-600",
+            box: boardBox,
+            onRemove: () => setBoardBox(null),
+          },
+        ]
+      : []),
+
+    ...seatBoxes.map((box) => ({
+      key: `seat-${box.seat_id}`,
+      label: box.seat_id,
+      icon: "user",
+      iconClass: "bg-emerald-50 text-emerald-700",
+      box,
+      onRemove: () => removeSeatBox(box.seat_id),
+    })),
+
+    ...fanBoxes.map((box) => ({
+      key: `fan-${box.device_id}`,
+      label: getDeviceName(box.device_id),
+      icon: "fan",
+      iconClass: "bg-brand-50 text-brand-600",
+      box,
+      onRemove: () => removeFanBox(box.device_id),
+    })),
+  ];
+
+  /*
    * ---------------------------------------------------------
    * RENDER
    * ---------------------------------------------------------
@@ -1089,8 +1183,8 @@ export default function AdminCalibration() {
     >
       <PageHeader
         eyebrow="Camera configuration"
-        title="Fan vision calibration"
-        description="Select a classroom, upload its camera image, and draw the fan areas directly on the image. The coordinates are stored for the SIMMS vision runtime."
+        title="Vision calibration"
+        description="Select a classroom, upload its camera image, and draw the board, seat and fan areas directly on the image. The coordinates are stored for the SIMMS vision runtime."
       />
 
       {error && (
@@ -1213,20 +1307,20 @@ export default function AdminCalibration() {
               )}
             </div>
 
-            {/* FAN DEVICE */}
+            {/* DRAW TARGET */}
             <div>
               <label
-                htmlFor="calibration-fan"
+                htmlFor="calibration-target"
                 className="label"
               >
-                Fan device
+                Draw
               </label>
 
               <select
-                id="calibration-fan"
-                value={selectedDeviceId}
+                id="calibration-target"
+                value={drawTarget}
                 onChange={(event) =>
-                  setSelectedDeviceId(
+                  setDrawTarget(
                     event.target.value
                   )
                 }
@@ -1234,17 +1328,29 @@ export default function AdminCalibration() {
                 className="select"
               >
                 <option value="">
-                  Select fan
+                  Choose what to draw
                 </option>
 
-                {fanDevices.map((device) => (
-                  <option
-                    key={device.device_id}
-                    value={device.device_id}
-                  >
-                    {device.device_name}
-                  </option>
-                ))}
+                <option value={BOARD_TARGET}>
+                  Board
+                </option>
+
+                <option value={SEAT_TARGET}>
+                  Seats (one box per seat)
+                </option>
+
+                {fanDevices.length > 0 && (
+                  <optgroup label="Fans">
+                    {fanDevices.map((device) => (
+                      <option
+                        key={device.device_id}
+                        value={`${FAN_TARGET_PREFIX}${device.device_id}`}
+                      >
+                        {device.device_name}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
               </select>
 
               {selectedRoomId &&
@@ -1256,14 +1362,47 @@ export default function AdminCalibration() {
                   />
                   No active fan devices are
                   registered for this classroom.
+                  Board and seats can still be drawn.
                 </p>
               ) : (
                 <p className="help-text">
-                  The selected fan is assigned to
-                  the next area you draw.
+                  The next area you draw is saved
+                  as this region.
                 </p>
               )}
             </div>
+
+            {/* BOARD TYPE */}
+            {(drawTarget === BOARD_TARGET ||
+              boardBox) && (
+              <div>
+                <label
+                  htmlFor="calibration-board-type"
+                  className="label"
+                >
+                  Board type
+                </label>
+
+                <select
+                  id="calibration-board-type"
+                  value={boardType}
+                  onChange={(event) =>
+                    setBoardType(
+                      event.target.value
+                    )
+                  }
+                  className="select"
+                >
+                  <option value="WHITEBOARD">
+                    Whiteboard (dark marker)
+                  </option>
+
+                  <option value="BLACKBOARD">
+                    Blackboard / greenboard (chalk)
+                  </option>
+                </select>
+              </div>
+            )}
 
             {/* INSTRUCTIONS */}
             <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-4">
@@ -1296,62 +1435,54 @@ export default function AdminCalibration() {
             <div>
               <div className="mb-2 flex items-center justify-between">
                 <p className="eyebrow">
-                  Fan areas
+                  Calibrated areas
                 </p>
 
                 <span className="num rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
-                  {fanBoxes.length}
+                  {regionCount}
                 </span>
               </div>
 
-              {fanBoxes.length === 0 ? (
+              {regionItems.length === 0 ? (
                 <div className="rounded-lg border border-dashed border-slate-200 px-4 py-5 text-center">
                   <p className="text-[13px] font-medium text-slate-500">
-                    No fan areas drawn
+                    No areas drawn
                   </p>
                 </div>
               ) : (
-                <ul className="divide-y divide-slate-100 overflow-hidden rounded-lg border border-slate-200">
-                  {fanBoxes.map((box) => (
+                <ul className="max-h-80 divide-y divide-slate-100 overflow-y-auto rounded-lg border border-slate-200">
+                  {regionItems.map((item) => (
                     <li
-                      key={box.device_id}
+                      key={item.key}
                       className="flex items-center gap-3 px-3 py-2.5"
                     >
-                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-600">
+                      <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${item.iconClass}`}>
                         <Icon
-                          name="fan"
+                          name={item.icon}
                           className="h-4 w-4"
                         />
                       </span>
 
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-[13px] font-semibold text-slate-900">
-                          {getDeviceName(
-                            box.device_id
-                          )}
+                          {item.label}
                         </p>
 
                         <p className="num mt-0.5 flex items-center gap-1 text-[11px] text-slate-500">
-                          ({box.x1}, {box.y1})
+                          ({item.box.x1}, {item.box.y1})
                           <Icon
                             name="arrowRight"
                             className="h-3 w-3"
                           />
-                          ({box.x2}, {box.y2})
+                          ({item.box.x2}, {item.box.y2})
                         </p>
                       </div>
 
                       <button
                         type="button"
-                        onClick={() =>
-                          removeFanBox(
-                            box.device_id
-                          )
-                        }
+                        onClick={item.onRemove}
                         className="btn btn-sm btn-danger-soft"
-                        aria-label={`Remove area for ${getDeviceName(
-                          box.device_id
-                        )}`}
+                        aria-label={`Remove area for ${item.label}`}
                       >
                         <Icon
                           name="trash"
@@ -1374,7 +1505,7 @@ export default function AdminCalibration() {
               disabled={
                 saving ||
                 !selectedRoomId ||
-                fanBoxes.length === 0
+                regionCount === 0
               }
               className="btn btn-primary w-full"
             >
@@ -1401,8 +1532,8 @@ export default function AdminCalibration() {
         {/* ================================================= */}
 
         <Card
-          title="Fan detection areas"
-          subtitle="Draw rectangles directly over the fans"
+          title="Detection areas"
+          subtitle="Draw rectangles over the board, each seat and each fan"
           icon="crosshair"
           actions={
             loadingCalibration ? (
@@ -1425,7 +1556,7 @@ export default function AdminCalibration() {
               <EmptyState
                 icon="image"
                 title="No classroom image selected"
-                description="Select a classroom and upload its camera image to begin fan calibration."
+                description="Select a classroom and upload its camera image to begin calibration."
               />
             </div>
           ) : (
@@ -1456,7 +1587,7 @@ export default function AdminCalibration() {
                 }
                 style={{
                   cursor:
-                    selectedDeviceId
+                    drawTarget
                       ? "crosshair"
                       : "default",
                   touchAction:
@@ -1469,12 +1600,51 @@ export default function AdminCalibration() {
                   alt="Classroom calibration"
                   draggable={false}
                   className="block h-auto w-full"
-                  onLoad={() =>
-                    setCurrentBox(
-                      null
-                    )
-                  }
+                  onLoad={(event) => {
+                    setCurrentBox(null);
+
+                    const { naturalWidth, naturalHeight } =
+                      event.currentTarget;
+
+                    setImageSize(
+                      naturalWidth && naturalHeight
+                        ? {
+                            width: naturalWidth,
+                            height: naturalHeight,
+                          }
+                        : null
+                    );
+                  }}
                 />
+
+                {/* SAVED BOARD BOX */}
+                {boardBox && (
+                  <div
+                    className="pointer-events-none absolute border-2 border-violet-400 bg-violet-400/15 shadow-[0_0_0_1px_rgba(0,0,0,0.25)]"
+                    style={getDisplayBoxStyle(
+                      boardBox
+                    )}
+                  >
+                    <div className="absolute -top-7 left-0 whitespace-nowrap rounded-md bg-violet-600 px-2 py-1 text-[10.5px] font-semibold text-white shadow-raised">
+                      Board
+                    </div>
+                  </div>
+                )}
+
+                {/* SAVED SEAT BOXES */}
+                {seatBoxes.map((box) => (
+                  <div
+                    key={`seat-${box.seat_id}`}
+                    className="pointer-events-none absolute border-2 border-emerald-400 bg-emerald-400/15 shadow-[0_0_0_1px_rgba(0,0,0,0.25)]"
+                    style={getDisplayBoxStyle(
+                      box
+                    )}
+                  >
+                    <div className="absolute left-0 top-0 whitespace-nowrap rounded-br-md bg-emerald-600 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                      {box.seat_id.replace("seat_", "")}
+                    </div>
+                  </div>
+                ))}
 
                 {/* SAVED FAN BOXES */}
                 {fanBoxes.map((box) => (
@@ -1502,9 +1672,7 @@ export default function AdminCalibration() {
                     )}
                   >
                     <div className="absolute -top-7 left-0 whitespace-nowrap rounded-md bg-amber-500 px-2 py-1 text-[10.5px] font-semibold text-ink-950 shadow-raised">
-                      {getDeviceName(
-                        currentBox.device_id
-                      )}{" "}
+                      {getDrawTargetLabel()}{" "}
                       · drawing
                     </div>
                   </div>
@@ -1518,10 +1686,10 @@ export default function AdminCalibration() {
             <dl className="mt-4 grid gap-3 sm:grid-cols-3">
               <div className="rounded-lg border border-slate-200 bg-slate-50/70 px-4 py-3">
                 <dt className="text-xs font-medium text-slate-500">
-                  Fans calibrated
+                  Board · seats · fans
                 </dt>
                 <dd className="num mt-1 text-xl font-semibold text-slate-900">
-                  {fanBoxes.length}
+                  {boardBox ? 1 : 0} · {seatBoxes.length} · {fanBoxes.length}
                 </dd>
               </div>
 
@@ -1530,15 +1698,15 @@ export default function AdminCalibration() {
                   Canvas mode
                 </dt>
                 <dd className="mt-1.5">
-                  {selectedDeviceId ? (
+                  {drawTarget ? (
                     <StatusBadge
                       tone="brand"
-                      label="Ready to draw"
+                      label={`Drawing: ${getDrawTargetLabel()}`}
                     />
                   ) : (
                     <StatusBadge
                       tone="neutral"
-                      label="Select fan"
+                      label="Choose what to draw"
                     />
                   )}
                 </dd>
@@ -1577,7 +1745,7 @@ export default function AdminCalibration() {
               />
               <div className="min-w-0">
                 <p className="text-[13px] font-semibold text-amber-900">
-                  Drawing fan area
+                  Drawing {getDrawTargetLabel()}
                 </p>
 
                 <p className="num mt-0.5 flex flex-wrap items-center gap-x-1 text-xs text-amber-800">
@@ -1632,9 +1800,16 @@ export default function AdminCalibration() {
               {activeCalibration.room_id}
             </DetailItem>
 
-            <DetailItem label="Fan areas" mono>
-              {activeCalibration
-                .calibration_data
+            <DetailItem label="Board · seats · fans" mono>
+              {activeCalibration.calibration_data
+                ?.board
+                ? 1
+                : 0}{" "}
+              ·{" "}
+              {activeCalibration.calibration_data
+                ?.seats?.length || 0}{" "}
+              ·{" "}
+              {activeCalibration.calibration_data
                 ?.fans?.length || 0}
             </DetailItem>
 

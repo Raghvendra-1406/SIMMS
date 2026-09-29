@@ -33,6 +33,11 @@ from services.fan_service import (
     extract_fan_motion,
 )
 
+from services.board_service import (
+    get_latest_board_observation,
+    extract_board_state,
+)
+
 from services.temporal_processor import (
     add_observation,
     is_recovered,
@@ -44,6 +49,7 @@ from services.temporal_processor import (
 FAULT_FAN_FAILURE = "FAN_FAILURE"
 FAULT_LIGHTS_LEFT_ON = "LIGHTS_LEFT_ON"
 FAULT_ELECTRICAL_ABNORMALITY = "ELECTRICAL_ABNORMALITY"
+FAULT_BOARD_NEEDS_CLEANING = "BOARD_NEEDS_CLEANING"
 
 
 # Separate temporal keys are used for post-repair verification.
@@ -53,6 +59,7 @@ FAULT_ELECTRICAL_ABNORMALITY = "ELECTRICAL_ABNORMALITY"
 VERIFY_FAN_FAILURE = "FAN_FAILURE_VERIFICATION"
 VERIFY_LIGHTS_LEFT_ON = "LIGHTS_LEFT_ON_VERIFICATION"
 VERIFY_ELECTRICAL_ABNORMALITY = "ELECTRICAL_ABNORMALITY_VERIFICATION"
+VERIFY_BOARD_NEEDS_CLEANING = "BOARD_NEEDS_CLEANING_VERIFICATION"
 
 
 def get_ticket(ticket_id):
@@ -299,6 +306,44 @@ def verify_electrical_abnormality(room_id):
 
 
 # ---------------------------------------------------------
+# BOARD CLEANING VERIFICATION
+# ---------------------------------------------------------
+
+def verify_board_cleaning(room_id):
+    board_state = extract_board_state(
+        get_latest_board_observation(room_id)
+    )
+
+    if board_state is None:
+        return {
+            "verified": False,
+            "status": "INSUFFICIENT_DATA",
+            "is_abnormal": None,
+            "evidence": {}
+        }
+
+    # Clean, or back in normal use: the cleaning was done.
+    if board_state in {"CLEAN", "IN_USE"}:
+        return {
+            "verified": True,
+            "status": "REPAIRED",
+            "is_abnormal": False,
+            "evidence": {
+                "board_state": board_state
+            }
+        }
+
+    return {
+        "verified": False,
+        "status": "FAULT_PERSISTS",
+        "is_abnormal": True,
+        "evidence": {
+            "board_state": board_state
+        }
+    }
+
+
+# ---------------------------------------------------------
 # GET VERIFICATION TEMPORAL CONFIGURATION
 # ---------------------------------------------------------
 
@@ -311,6 +356,9 @@ def get_verification_configuration(fault_type):
 
     if fault_type == FAULT_ELECTRICAL_ABNORMALITY:
         return VERIFY_ELECTRICAL_ABNORMALITY
+
+    if fault_type == FAULT_BOARD_NEEDS_CLEANING:
+        return VERIFY_BOARD_NEEDS_CLEANING
 
     raise ValueError(
         "Unsupported fault type for verification."
@@ -372,6 +420,12 @@ def verify_ticket(
     elif fault_type == FAULT_ELECTRICAL_ABNORMALITY:
 
         result = verify_electrical_abnormality(
+            room_id=room_id
+        )
+
+    elif fault_type == FAULT_BOARD_NEEDS_CLEANING:
+
+        result = verify_board_cleaning(
             room_id=room_id
         )
 

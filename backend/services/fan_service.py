@@ -14,6 +14,10 @@ from database.repositories.room_repository import (
     get_room_by_id,
 )
 
+from config.settings import (
+    MIN_VOTE_CONFIDENCE,
+)
+
 
 FAN_FAILURE_THRESHOLD = 4
 
@@ -82,6 +86,8 @@ def extract_fan_motion(observation):
     confidence == 0 means the detector had no usable frame
     (first frame after start-up or an invalid ROI), so the
     observation is treated as unknown rather than "not running".
+    Any confidence below MIN_VOTE_CONFIDENCE is treated the same
+    way, so it does not vote (Plan v2 §7.1).
     """
 
     if observation is None:
@@ -99,7 +105,7 @@ def extract_fan_motion(observation):
     if running is None:
         return None
 
-    if not fan_motion.get("confidence"):
+    if (fan_motion.get("confidence") or 0) < MIN_VOTE_CONFIDENCE:
         return None
 
     return bool(running)

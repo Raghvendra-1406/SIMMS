@@ -9,6 +9,8 @@ from database.repositories.ticket_repository import (
     update_maintenance_notes,
     get_latest_resolved_ticket_for_fault_identity,
     get_hours_since_resolution,
+    increment_ticket_recurrence,
+    count_recent_recurrence_reopens,
 )
 
 from database.connection import (
@@ -45,6 +47,18 @@ ALLOWED_PRIORITIES = {
     "HIGH",
     "MEDIUM",
     "LOW",
+}
+
+# Plan v2 §9.2: a fault that keeps coming back after repair means
+# the repair is incomplete; escalate priority one level once it has
+# recurred this many times within ESCALATION_WINDOW_DAYS.
+ESCALATE_AFTER_RECURRENCES = 3
+ESCALATION_WINDOW_DAYS = 7
+
+PRIORITY_ESCALATION = {
+    "LOW": "MEDIUM",
+    "MEDIUM": "HIGH",
+    "HIGH": "HIGH",
 }
 
 ALLOWED_STATUSES = {
@@ -111,6 +125,9 @@ def determine_priority(fault_type):
         return "MEDIUM"
 
     if fault_type == "LIGHTS_LEFT_ON":
+        return "LOW"
+
+    if fault_type == "BOARD_NEEDS_CLEANING":
         return "LOW"
 
     return "MEDIUM"
@@ -216,6 +233,9 @@ def create_ticket_notifications(
     elif fault_type == "ELECTRICAL_ABNORMALITY":
         fault_name = "Electrical abnormality"
 
+    elif fault_type == "BOARD_NEEDS_CLEANING":
+        fault_name = "Board needs cleaning"
+
     else:
         fault_name = fault_type
 
@@ -279,6 +299,9 @@ def create_recurrence_notification(
     elif fault_type == "ELECTRICAL_ABNORMALITY":
         fault_name = "Electrical abnormality"
 
+    elif fault_type == "BOARD_NEEDS_CLEANING":
+        fault_name = "Board needs cleaning"
+
     else:
         fault_name = fault_type
 
@@ -311,6 +334,117 @@ def create_recurrence_notification(
             message=message,
             ticket_id=ticket_id
         )
+
+
+FAULT_NAMES = {
+    "FAN_FAILURE": "Fan failure",
+    "LIGHTS_LEFT_ON": "Lights left on",
+    "ELECTRICAL_ABNORMALITY": "Electrical abnormality",
+    "BOARD_NEEDS_CLEANING": "Board needs cleaning",
+}
+
+
+def notify_supervisors(notification_type, message, ticket_id):
+    for supervisor in get_users_by_role("SUPERVISOR"):
+        if not supervisor[6]:
+            continue
+
+        create_system_notification(
+            user_id=supervisor[0],
+            notification_type=notification_type,
+            message=message,
+            ticket_id=ticket_id
+        )
+
+
+def escalate_if_recurring(ticket, fault):
+    """
+    Raise the ticket priority one level when its fault has recurred
+    ESCALATE_AFTER_RECURRENCES times within ESCALATION_WINDOW_DAYS.
+    Returns the (possibly updated) ticket.
+    """
+
+    ticket_id = ticket[0]
+    priority = ticket[2]
+
+    recent = count_recent_recurrence_reopens(
+        ticket_id,
+        ESCALATION_WINDOW_DAYS
+    )
+
+    new_priority = PRIORITY_ESCALATION.get(priority, priority)
+
+    if recent < ESCALATE_AFTER_RECURRENCES or new_priority == priority:
+        return ticket
+
+    updated_ticket = update_ticket_priority(
+        ticket_id=ticket_id,
+        priority=new_priority
+    )
+
+    fault_name = FAULT_NAMES.get(fault[3], fault[3])
+
+    notify_supervisors(
+        "TICKET_ESCALATED",
+        (
+            f"{fault_name} in room {fault[1]} recurred {recent} times "
+            f"in {ESCALATION_WINDOW_DAYS} days. Ticket #{ticket_id} "
+            f"escalated from {priority} to {new_priority} priority."
+        ),
+        ticket_id
+    )
+
+    return updated_ticket
+
+
+def auto_resolve_ticket(ticket, fault):
+    """
+    Close a ticket nobody has acted on yet because its fault cleared
+    by itself (Plan v2 §7.3), e.g. the next lecturer cleaned the board
+    or switched the lights off before staff arrived.
+    """
+
+    ticket_id = ticket[0]
+
+    if ticket[3] != "OPEN":
+        raise ValueError(
+            "Only an untouched OPEN ticket can be auto-resolved."
+        )
+
+    with transaction():
+        updated_ticket = update_ticket_status(
+            ticket_id=ticket_id,
+            status="AUTO_RESOLVED"
+        )
+
+        create_ticket_history(
+            ticket_id=ticket_id,
+            previous_status="OPEN",
+            new_status="AUTO_RESOLVED",
+            changed_by=None,
+            note=(
+                "Fault cleared before anyone acted: at least 3 of "
+                "the last 5 observations were normal."
+            )
+        )
+
+        update_fault_status(
+            fault_id=fault[0],
+            status="AUTO_RESOLVED"
+        )
+
+        fault_name = FAULT_NAMES.get(fault[3], fault[3])
+
+        notify_supervisors(
+            "TICKET_AUTO_RESOLVED",
+            (
+                f"{fault_name} in room {fault[1]} cleared by itself. "
+                f"Ticket #{ticket_id} was closed automatically."
+            ),
+            ticket_id
+        )
+
+    return updated_ticket
 
 
 def reopen_existing_ticket_for_recurrence(
@@ -357,6 +491,13 @@ def reopen_existing_ticket_for_recurrence(
         )
 
         create_recurrence_notification(
+            ticket=updated_ticket,
+            fault=fault
+        )
+
+        increment_ticket_recurrence(ticket_id)
+
+        updated_ticket = escalate_if_recurring(
             ticket=updated_ticket,
             fault=fault
         )

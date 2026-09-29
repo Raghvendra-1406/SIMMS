@@ -33,10 +33,16 @@ from services.electrical_service import (
     ELECTRICAL_ABNORMALITY_THRESHOLD,
 )
 
+from services.board_service import (
+    evaluate_board_status,
+    BOARD_CLEANING_THRESHOLD,
+)
+
 
 FAULT_FAN_FAILURE = "FAN_FAILURE"
 FAULT_LIGHTS_LEFT_ON = "LIGHTS_LEFT_ON"
 FAULT_ELECTRICAL_ABNORMALITY = "ELECTRICAL_ABNORMALITY"
+FAULT_BOARD_NEEDS_CLEANING = "BOARD_NEEDS_CLEANING"
 
 
 def validate_room_exists(room_id):
@@ -212,6 +218,31 @@ def detect_electrical_abnormality(
     )
 
 
+def detect_board_cleaning(
+    room_id,
+    abnormal_count
+):
+    validate_room_exists(room_id)
+
+    result = evaluate_board_status(
+        room_id=room_id
+    )
+
+    if result["status"] != "CLEANING_CANDIDATE":
+        return None
+
+    if abnormal_count < BOARD_CLEANING_THRESHOLD:
+        return None
+
+    return create_confirmed_fault(
+        room_id=room_id,
+        device_id=None,
+        fault_type=FAULT_BOARD_NEEDS_CLEANING,
+        confidence=100.0,
+        abnormal_count=abnormal_count
+    )
+
+
 def detect_fault(
     fault_type,
     room_id,
@@ -242,6 +273,12 @@ def detect_fault(
             room_id=room_id,
             abnormal_count=abnormal_count,
             confidence=confidence
+        )
+
+    if fault_type == FAULT_BOARD_NEEDS_CLEANING:
+        return detect_board_cleaning(
+            room_id=room_id,
+            abnormal_count=abnormal_count
         )
 
     raise ValueError(

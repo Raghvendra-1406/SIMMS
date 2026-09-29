@@ -15,6 +15,7 @@ import {
 } from "../../components/ui";
 import { formatLabel, statusTone } from "../../lib/format";
 import { navigateTo } from "../../lib/session";
+import { usePolling } from "../../lib/usePolling";
 
 const API_BASE_URL = "http://localhost:8000";
 
@@ -56,9 +57,9 @@ function MaintenanceTickets() {
 
     const token = localStorage.getItem("access_token");
 
-    const fetchTickets = async () => {
+    const fetchTickets = async ({ silent = false } = {}) => {
         try {
-            setLoading(true);
+            if (!silent) setLoading(true);
             setError("");
 
             if (!token) {
@@ -169,6 +170,9 @@ function MaintenanceTickets() {
         fetchTickets();
     }, []);
 
+    // Keep the page in sync with live data without flashing skeletons.
+    usePolling(fetchTickets, 10000);
+
     const enrichedTickets = useMemo(() => {
         return tickets.map((ticket) => {
             const fault = faults[ticket.fault_id];
@@ -253,6 +257,9 @@ function MaintenanceTickets() {
 
             case "LIGHTS_LEFT_ON":
                 return "Lights Left On";
+
+            case "BOARD_NEEDS_CLEANING":
+                return "Board Needs Cleaning";
 
             case "ELECTRICAL_ABNORMALITY":
                 return "Electrical Abnormality";

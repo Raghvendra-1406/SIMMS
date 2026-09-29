@@ -14,6 +14,7 @@ import {
 } from "../../components/ui";
 import { formatLabel } from "../../lib/format";
 import { navigateTo } from "../../lib/session";
+import { usePolling } from "../../lib/usePolling";
 
 const API_BASE_URL = "http://localhost:8000";
 
@@ -38,6 +39,7 @@ function getFaultTypeLabel(faultType) {
   const labels = {
     FAN_FAILURE: "Fan failure",
     LIGHTS_LEFT_ON: "Lights left on",
+    BOARD_NEEDS_CLEANING: "Board needs cleaning",
     ELECTRICAL_ABNORMALITY: "Electrical abnormality",
   };
 
@@ -162,6 +164,9 @@ export default function SupervisorClassroomDetails() {
     loadClassroomData();
   }, [roomId]);
 
+  // Keep the page in sync with live data without flashing skeletons.
+  usePolling(loadClassroomData, 10000);
+
   async function fetchApi(endpoint) {
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
       method: "GET",
@@ -187,12 +192,12 @@ export default function SupervisorClassroomDetails() {
     return response.json();
   }
 
-  async function loadClassroomData() {
+  async function loadClassroomData({ silent = false } = {}) {
     if (roomId === null) {
       return;
     }
 
-    setLoading(true);
+    if (!silent) setLoading(true);
     setError("");
 
     try {

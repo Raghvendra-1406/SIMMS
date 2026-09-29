@@ -12,6 +12,7 @@ import {
 } from "../../components/ui";
 import { statusTone } from "../../lib/format";
 import { navigateTo } from "../../lib/session";
+import { usePolling } from "../../lib/usePolling";
 
 const API_BASE_URL = "http://localhost:8000";
 
@@ -75,13 +76,13 @@ function MaintenanceDashboard() {
 
   const token = localStorage.getItem("access_token");
 
-  const loadDashboard = useCallback(async () => {
+  const loadDashboard = useCallback(async ({ silent = false } = {}) => {
     if (!token) {
       window.location.href = "/";
       return;
     }
 
-    setLoading(true);
+    if (!silent) setLoading(true);
     setError("");
 
     try {
@@ -162,6 +163,9 @@ function MaintenanceDashboard() {
   useEffect(() => {
     loadDashboard();
   }, [loadDashboard]);
+
+  // Keep the page in sync with live data without flashing skeletons.
+  usePolling(loadDashboard, 10000);
 
   const classroomMap = useMemo(() => {
     const map = {};

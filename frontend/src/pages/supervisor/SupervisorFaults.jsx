@@ -14,6 +14,7 @@ import {
 } from "../../components/ui";
 import { navigateTo } from "../../lib/session";
 import { formatConfidence } from "../../lib/format";
+import { usePolling } from "../../lib/usePolling";
 
 const API_BASE_URL = "http://localhost:8000";
 
@@ -46,6 +47,7 @@ function getFaultTypeLabel(faultType) {
   const labels = {
     FAN_FAILURE: "Fan failure",
     LIGHTS_LEFT_ON: "Lights left on",
+    BOARD_NEEDS_CLEANING: "Board needs cleaning",
     ELECTRICAL_ABNORMALITY:
       "Electrical abnormality",
   };
@@ -63,6 +65,7 @@ function getFaultTypeLabel(faultType) {
 const FAULT_TYPE_META = {
   FAN_FAILURE: { icon: "fan", tone: "warning" },
   LIGHTS_LEFT_ON: { icon: "lightbulb", tone: "warning" },
+  BOARD_NEEDS_CLEANING: { icon: "clipboard", tone: "info" },
   ELECTRICAL_ABNORMALITY: { icon: "zap", tone: "danger" },
 };
 
@@ -98,6 +101,9 @@ export default function SupervisorFaults() {
     loadFaults();
   }, []);
 
+  // Keep the page in sync with live data without flashing skeletons.
+  usePolling(loadFaults, 10000);
+
   async function fetchApi(endpoint) {
     const response = await fetch(
       `${API_BASE_URL}${endpoint}`,
@@ -127,8 +133,8 @@ export default function SupervisorFaults() {
     return response.json();
   }
 
-  async function loadFaults() {
-    setLoading(true);
+  async function loadFaults({ silent = false } = {}) {
+    if (!silent) setLoading(true);
     setError("");
 
     try {
@@ -266,11 +272,24 @@ export default function SupervisorFaults() {
     [faults]
   );
 
+  const boardCleaning = useMemo(
+    () =>
+      faults.filter(
+        (fault) =>
+          String(
+            fault.fault_type || ""
+          ).toUpperCase() ===
+          "BOARD_NEEDS_CLEANING"
+      ).length,
+    [faults]
+  );
+
   const typeOptions = [
     { value: "ALL", label: "All types", count: loading ? undefined : faults.length },
     { value: "FAN_FAILURE", label: "Fan failure", count: loading ? undefined : fanFailures },
     { value: "LIGHTS_LEFT_ON", label: "Lights left on", count: loading ? undefined : lightsLeftOn },
     { value: "ELECTRICAL_ABNORMALITY", label: "Electrical", count: loading ? undefined : electricalFaults },
+    { value: "BOARD_NEEDS_CLEANING", label: "Board cleaning", count: loading ? undefined : boardCleaning },
   ];
 
   const openFault = (faultId) =>

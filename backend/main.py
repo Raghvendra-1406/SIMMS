@@ -1,4 +1,5 @@
 import threading
+from contextlib import asynccontextmanager
 
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -23,37 +24,43 @@ from api.calibration_image import (
     router as calibration_image_router
 )
 from api.notifications import router as notification_router
+from api.live import router as live_router
+from services.scheduler import start_scheduler
+
+
+@asynccontextmanager
+async def lifespan(app):
+    threading.Thread(
+        target=start_mqtt_subscriber,
+        name="mqtt",
+        daemon=True
+    ).start()
+
+    scheduler_stop = start_scheduler()
+
+    print("SIMMS backend started.")
+
+    yield
+
+    scheduler_stop.set()
+
 
 app = FastAPI(
     title="Smart Classroom Infrastructure Monitoring System",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan
 )
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-mqtt_thread = None
-
-
-@app.on_event("startup")
-def startup_event():
-    global mqtt_thread
-
-    mqtt_thread = threading.Thread(
-        target=start_mqtt_subscriber,
-        daemon=True
-    )
-
-    mqtt_thread.start()
-
-    print("SIMMS backend started.")
-    print("MQTT subscriber started in background.")
-
 
 app.include_router(auth_router)
 app.include_router(user_router)
@@ -72,6 +79,7 @@ app.include_router(
     calibration_image_router
 )
 app.include_router(notification_router)
+app.include_router(live_router)
 
 @app.get("/")
 def root():

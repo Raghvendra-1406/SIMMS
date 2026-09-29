@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -32,3 +33,13 @@ class RoomResponse(BaseModel):
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class RoomCommand(BaseModel):
+    """
+    Relay command for the room's demo panel (Plan v2 §11.3:
+    relay switching is demonstration-panel only).
+    """
+
+    target: Literal["LAMP", "FAN"]
+    state: Literal["ON", "OFF"]

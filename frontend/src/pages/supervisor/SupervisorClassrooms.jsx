@@ -15,6 +15,7 @@ import {
 } from "../../components/ui";
 import { navigateTo } from "../../lib/session";
 import { isHealthyStatus } from "../../lib/format";
+import { usePolling } from "../../lib/usePolling";
 
 const API_BASE_URL = "http://localhost:8000";
 
@@ -51,6 +52,9 @@ export default function SupervisorClassrooms() {
     loadClassroomData();
   }, []);
 
+  // Keep the page in sync with live data without flashing skeletons.
+  usePolling(loadClassroomData, 10000);
+
   async function fetchApi(endpoint) {
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
       method: "GET",
@@ -76,8 +80,8 @@ export default function SupervisorClassrooms() {
     return response.json();
   }
 
-  async function loadClassroomData() {
-    setLoading(true);
+  async function loadClassroomData({ silent = false } = {}) {
+    if (!silent) setLoading(true);
     setError("");
 
     try {

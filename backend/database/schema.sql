@@ -64,7 +64,8 @@ CREATE TABLE tickets (
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     resolved_at TIMESTAMPTZ,
     closed_at TIMESTAMPTZ,
-    maintenance_notes TEXT
+    maintenance_notes TEXT,
+    recurrence_count INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE ticket_history (
@@ -141,6 +142,24 @@ CREATE TABLE vision_calibrations (
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     is_active BOOLEAN DEFAULT TRUE,
     UNIQUE (room_id, calibration_version)
+);
+
+
+-- Online/offline status of IoT nodes and cameras.
+CREATE TABLE node_status (
+    node_status_id SERIAL PRIMARY KEY,
+    room_id INTEGER NOT NULL
+        REFERENCES rooms(room_id) ON DELETE CASCADE,
+    node_id VARCHAR(64) NOT NULL,
+    kind VARCHAR(30),
+    state VARCHAR(20) NOT NULL,
+    rssi INTEGER,
+    uptime_s BIGINT,
+    fw_version VARCHAR(30),
+    details JSONB,
+    last_seen TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (room_id, node_id)
 );
 
 

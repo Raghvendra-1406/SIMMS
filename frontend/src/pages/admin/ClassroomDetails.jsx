@@ -15,6 +15,7 @@ import {
   StatusBadge,
 } from "../../components/ui";
 import { navigateTo } from "../../lib/session";
+import { usePolling } from "../../lib/usePolling";
 
 const API_BASE_URL = "http://localhost:8000";
 
@@ -131,9 +132,9 @@ export default function ClassroomDetails() {
     pathParts.length - 1
   ];
 
-  const loadRoom = async () => {
+  const loadRoom = async ({ silent = false } = {}) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       setError("");
 
       const response = await fetch(
@@ -162,9 +163,9 @@ export default function ClassroomDetails() {
     }
   };
 
-  const loadDevices = async () => {
+  const loadDevices = async ({ silent = false } = {}) => {
     try {
-      setDeviceLoading(true);
+      if (!silent) setDeviceLoading(true);
       setDeviceError("");
 
       const response = await fetch(
@@ -195,10 +196,10 @@ export default function ClassroomDetails() {
     }
   };
 
-  const loadData = async () => {
+  const loadData = async ({ silent = false } = {}) => {
     await Promise.all([
-      loadRoom(),
-      loadDevices(),
+      loadRoom({ silent }),
+      loadDevices({ silent }),
     ]);
   };
 
@@ -211,6 +212,9 @@ export default function ClassroomDetails() {
 
     loadData();
   }, [roomId]);
+
+  // Keep the page in sync with live data without flashing skeletons.
+  usePolling(loadData, 10000);
 
   const openAddDeviceModal = () => {
     setEditingDevice(null);

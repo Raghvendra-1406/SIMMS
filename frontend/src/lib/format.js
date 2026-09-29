@@ -16,6 +16,7 @@ export const STATUS_TONE = {
   RESOLVED: "success",
   CLOSED: "neutral",
   REOPENED: "orange",
+  AUTO_RESOLVED: "info",
 
   // Faults
   ACTIVE: "success",

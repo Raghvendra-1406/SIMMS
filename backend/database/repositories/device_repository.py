@@ -1,4 +1,9 @@
+from database.cache import TTLCache
 from database.connection import get_connection
+
+
+# get_device_by_id runs several times per MQTT message.
+_device_cache = TTLCache(ttl_seconds=60)
 
 
 def get_all_devices():
@@ -27,6 +32,64 @@ def get_all_devices():
 
 
 def get_device_by_id(device_id):
+    cached = _device_cache.get(device_id)
+
+    if cached is not None:
+        return cached
+
+    device = _fetch_device_by_id(device_id)
+
+    _device_cache.set(device_id, device)
+
+    return device
+
+
+def get_device_by_room_and_name(room_id, device_name):
+    """
+    Find a device in a room by name, ignoring case.
+    Lets firmware refer to devices by name ("Fan 1")
+    instead of database IDs.
+    """
+
+    cache_key = ("name", room_id, device_name.lower())
+
+    cached = _device_cache.get(cache_key)
+
+    if cached is not None:
+        return cached
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute("""
+            SELECT
+                device_id,
+                room_id,
+                device_type,
+                device_name,
+                status,
+                last_seen,
+                created_at
+            FROM devices
+            WHERE room_id = %s
+              AND LOWER(device_name) = LOWER(%s)
+            ORDER BY device_id
+            LIMIT 1
+        """, (room_id, device_name))
+
+        device = cursor.fetchone()
+
+    finally:
+        cursor.close()
+        conn.close()
+
+    _device_cache.set(cache_key, device)
+
+    return device
+
+
+def _fetch_device_by_id(device_id):
     conn = get_connection()
     cursor = conn.cursor()
 
@@ -113,6 +176,8 @@ def create_device(
         device = cursor.fetchone()
         conn.commit()
 
+        _device_cache.clear()
+
         return device
 
     except Exception:
@@ -162,6 +227,8 @@ def update_device(
         device = cursor.fetchone()
         conn.commit()
 
+        _device_cache.clear()
+
         return device
 
     except Exception:
@@ -198,6 +265,8 @@ def update_device_last_seen(device_id, last_seen):
         device = cursor.fetchone()
         conn.commit()
 
+        _device_cache.clear()
+
         return device
 
     except Exception:
@@ -233,6 +302,8 @@ def update_device_status(device_id, status):
 
         device = cursor.fetchone()
         conn.commit()
+
+        _device_cache.clear()
 
         return device
 

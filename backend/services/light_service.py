@@ -10,6 +10,14 @@ from database.repositories.room_repository import (
     get_room_by_id,
 )
 
+from config.settings import (
+    VACANCY_MINUTES,
+)
+
+from services.occupancy_service import (
+    get_vacancy,
+)
+
 
 LIGHT_WASTAGE_THRESHOLD = 4
 
@@ -56,56 +64,66 @@ def extract_occupancy_count(observation):
 
 
 def evaluate_light_status(room_id):
+    """
+    Lights left on = light ON while the room has been vacant for
+    at least VACANCY_MINUTES (Plan v2 §8.6). A room that just
+    emptied, or one in use, is normal.
+    """
+
     validate_room_exists(room_id)
 
-    light_observation = get_latest_light_observation(
-        room_id
-    )
-
-    occupancy_observation = get_latest_occupancy_observation(
-        room_id
-    )
-
     light_state = extract_light_state(
-        light_observation
+        get_latest_light_observation(room_id)
     )
 
-    occupancy_count = extract_occupancy_count(
-        occupancy_observation
-    )
-
-    if light_state is None or occupancy_count is None:
+    if light_state is None:
         return {
             "status": "UNKNOWN",
-            "light_state": light_state,
-            "occupancy_count": occupancy_count,
+            "light_state": None,
+            "occupied": None,
+            "vacant_minutes": None,
         }
 
     if light_state == "OFF":
         return {
             "status": "NORMAL",
             "light_state": light_state,
-            "occupancy_count": occupancy_count,
+            "occupied": None,
+            "vacant_minutes": None,
         }
 
-    if light_state == "ON" and occupancy_count > 0:
+    vacancy = get_vacancy(room_id)
+
+    result = {
+        "light_state": light_state,
+        "occupied": vacancy["occupied"],
+        "vacant_minutes": vacancy["vacant_minutes"],
+    }
+
+    if vacancy["occupied"] is None:
+        return {
+            "status": "UNKNOWN",
+            **result,
+        }
+
+    if vacancy["occupied"]:
         return {
             "status": "NORMAL",
-            "light_state": light_state,
-            "occupancy_count": occupancy_count,
+            **result,
         }
 
-    if light_state == "ON" and occupancy_count == 0:
+    if (
+        vacancy["vacant_minutes"] is not None
+        and vacancy["vacant_minutes"] >= VACANCY_MINUTES
+    ):
         return {
             "status": "WASTAGE_CANDIDATE",
-            "light_state": light_state,
-            "occupancy_count": occupancy_count,
+            **result,
         }
 
     return {
-        "status": "UNKNOWN",
-        "light_state": light_state,
-        "occupancy_count": occupancy_count,
+        "status": "NORMAL",
+        **result,
     }
 
 

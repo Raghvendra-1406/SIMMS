@@ -14,6 +14,7 @@ import {
   StatusBadge,
 } from "../../components/ui";
 import { navigateTo } from "../../lib/session";
+import { usePolling } from "../../lib/usePolling";
 
 const API_BASE_URL = "http://localhost:8000";
 
@@ -46,6 +47,7 @@ function getFaultTypeLabel(faultType) {
   const labels = {
     FAN_FAILURE: "Fan failure",
     LIGHTS_LEFT_ON: "Lights left on",
+    BOARD_NEEDS_CLEANING: "Board needs cleaning",
     ELECTRICAL_ABNORMALITY:
       "Electrical abnormality",
   };
@@ -62,10 +64,10 @@ function getFaultTypeLabel(faultType) {
 const STATUS_OPTIONS = [
   { value: "ALL", label: "All" },
   { value: "OPEN", label: "Open" },
-  { value: "IN_PROGRESS", label: "In progress" },
   { value: "RESOLVED", label: "Resolved" },
   { value: "CLOSED", label: "Closed" },
   { value: "REOPENED", label: "Reopened" },
+  { value: "AUTO_RESOLVED", label: "Auto-resolved" },
 ];
 
 export default function SupervisorTickets() {
@@ -97,6 +99,9 @@ export default function SupervisorTickets() {
     loadTickets();
   }, []);
 
+  // Keep the page in sync with live data without flashing skeletons.
+  usePolling(loadTickets, 10000);
+
   async function fetchApi(endpoint) {
     const response = await fetch(
       `${API_BASE_URL}${endpoint}`,
@@ -126,8 +131,8 @@ export default function SupervisorTickets() {
     return response.json();
   }
 
-  async function loadTickets() {
-    setLoading(true);
+  async function loadTickets({ silent = false } = {}) {
+    if (!silent) setLoading(true);
     setError("");
 
     try {

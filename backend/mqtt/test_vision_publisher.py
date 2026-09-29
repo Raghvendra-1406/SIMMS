@@ -1,10 +1,18 @@
+"""
+Publish one sample vision result for room R101.
+
+    cd backend
+    python -m mqtt.test_vision_publisher
+
+For a continuous stand-in node use scripts/fake_node.py instead.
+"""
+
 from mqtt.vision_publisher import VisionPublisher
 
 
 def main():
 
     vision_result = {
-        "room_id": 1,
         "calibration_version": 1,
         "occupancy": {
             "person_count": 3
@@ -16,14 +24,21 @@ def main():
                 "motion_score": 0.01,
                 "confidence": 0.91
             }
-        ]
+        ],
+        "board": {
+            "state": "CLEAN",
+            "ink_ratio": 0.01,
+            "confidence": 1.0
+        }
     }
 
-    publisher = VisionPublisher()
+    publisher = VisionPublisher(room_name="R101")
 
     try:
 
         publisher.connect()
+
+        publisher.publish_status(True)
 
         publisher.publish_vision_result(
             vision_result

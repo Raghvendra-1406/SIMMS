@@ -1,0 +1,9 @@
+# Vision runtime (camera side). Install on the Raspberry Pi, or on a
+# laptop standing in for it, in addition to requirements.txt:
+#
+#     pip install -r requirements.txt -r requirements-vision.txt
+#
+# On the Raspberry Pi also install picamera2 (apt install python3-picamera2).
+ultralytics
+opencv-python
+numpy

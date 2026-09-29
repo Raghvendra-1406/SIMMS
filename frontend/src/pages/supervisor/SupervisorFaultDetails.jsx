@@ -44,6 +44,7 @@ function getFaultTypeLabel(faultType) {
   const labels = {
     FAN_FAILURE: "Fan failure",
     LIGHTS_LEFT_ON: "Lights left on",
+    BOARD_NEEDS_CLEANING: "Board needs cleaning",
     ELECTRICAL_ABNORMALITY:
       "Electrical abnormality",
   };
@@ -61,6 +62,7 @@ function getFaultTypeLabel(faultType) {
 const FAULT_TYPE_META = {
   FAN_FAILURE: { icon: "fan", tone: "warning" },
   LIGHTS_LEFT_ON: { icon: "lightbulb", tone: "warning" },
+  BOARD_NEEDS_CLEANING: { icon: "clipboard", tone: "info" },
   ELECTRICAL_ABNORMALITY: { icon: "zap", tone: "danger" },
 };
 
