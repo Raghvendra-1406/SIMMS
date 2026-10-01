@@ -1266,7 +1266,7 @@ export default function AdminCalibration() {
               </label>
 
               <label className="group flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-slate-50/70 px-4 py-6 text-center transition-colors duration-150 focus-within:border-brand-400 focus-within:ring-2 focus-within:ring-brand-200 hover:border-brand-300 hover:bg-brand-50/40">
-                <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-white text-slate-500 shadow-card ring-1 ring-slate-200 group-hover:text-brand-600">
+                <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-surface text-slate-500 shadow-card ring-1 ring-slate-200 group-hover:text-brand-600">
                   <Icon
                     name="image"
                     className="h-5 w-5"
@@ -1421,7 +1421,7 @@ export default function AdminCalibration() {
                       key={step}
                       className="flex items-start gap-2.5 text-xs leading-5 text-slate-600"
                     >
-                      <span className="num flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white text-[11px] font-semibold text-brand-700 ring-1 ring-brand-200">
+                      <span className="num flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-surface text-[11px] font-semibold text-brand-700 ring-1 ring-brand-200">
                         {index + 1}
                       </span>
                       {step}
@@ -1625,7 +1625,7 @@ export default function AdminCalibration() {
                       boardBox
                     )}
                   >
-                    <div className="absolute -top-7 left-0 whitespace-nowrap rounded-md bg-violet-600 px-2 py-1 text-[10.5px] font-semibold text-white shadow-raised">
+                    <div className="absolute -top-7 left-0 whitespace-nowrap rounded-md bg-accent px-2 py-1 text-[10.5px] font-semibold text-white shadow-raised">
                       Board
                     </div>
                   </div>
@@ -1640,7 +1640,7 @@ export default function AdminCalibration() {
                       box
                     )}
                   >
-                    <div className="absolute left-0 top-0 whitespace-nowrap rounded-br-md bg-emerald-600 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                    <div className="absolute left-0 top-0 whitespace-nowrap rounded-br-md bg-success px-1.5 py-0.5 text-[10px] font-semibold text-white">
                       {box.seat_id.replace("seat_", "")}
                     </div>
                   </div>
@@ -1655,7 +1655,7 @@ export default function AdminCalibration() {
                       box
                     )}
                   >
-                    <div className="absolute -top-7 left-0 whitespace-nowrap rounded-md bg-brand-600 px-2 py-1 text-[10.5px] font-semibold text-white shadow-raised">
+                    <div className="absolute -top-7 left-0 whitespace-nowrap rounded-md bg-primary px-2 py-1 text-[10.5px] font-semibold text-white shadow-raised">
                       {getDeviceName(
                         box.device_id
                       )}

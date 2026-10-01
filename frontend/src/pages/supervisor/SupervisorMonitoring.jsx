@@ -100,7 +100,7 @@ function Freshness({ age }) {
 
 function Panel({ icon, title, age, children, className = "" }) {
   return (
-    <section className={`rounded-xl border border-slate-200 bg-white p-4 ${className}`}>
+    <section className={`rounded-xl border border-slate-200 bg-surface p-4 ${className}`}>
       <div className="mb-3 flex items-center justify-between gap-2">
         <p className="flex items-center gap-2 text-[13px] font-semibold text-slate-800">
           <Icon name={icon} className="h-4 w-4 text-slate-500" />

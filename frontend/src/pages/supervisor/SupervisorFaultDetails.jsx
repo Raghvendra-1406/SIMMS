@@ -420,7 +420,7 @@ export default function SupervisorFaultDetails() {
                         return (
                           <li key={step.label} className="relative pl-6">
                             <span
-                              className={`absolute -left-[5px] top-1.5 h-2.5 w-2.5 rounded-full ring-4 ring-white ${reached ? "bg-brand-500" : "bg-slate-300"}`}
+                              className={`absolute -left-[5px] top-1.5 h-2.5 w-2.5 rounded-full ring-4 ring-surface ${reached ? "bg-brand-500" : "bg-slate-300"}`}
                               aria-hidden="true"
                             />
                             <p className="flex items-center gap-1.5 text-xs font-medium text-slate-500">

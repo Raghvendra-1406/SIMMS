@@ -526,8 +526,8 @@ export default function SupervisorTicketDetails() {
                     return (
                       <li key={step.key} className="relative pb-5 pl-6 last:pb-0">
                         <span
-                          className={`absolute -left-[7px] top-1 h-3.5 w-3.5 rounded-full ring-4 ring-white ${
-                            reached ? "bg-brand-600" : "border-2 border-slate-300 bg-white"
+                          className={`absolute -left-[7px] top-1 h-3.5 w-3.5 rounded-full ring-4 ring-surface ${
+                            reached ? "bg-brand-600" : "border-2 border-slate-300 bg-surface"
                           }`}
                           aria-hidden="true"
                         />
@@ -574,7 +574,7 @@ export default function SupervisorTicketDetails() {
                         className="relative pb-6 pl-6 last:pb-0"
                       >
                         <span
-                          className="absolute -left-[7px] top-1 h-3.5 w-3.5 rounded-full bg-brand-600 ring-4 ring-white"
+                          className="absolute -left-[7px] top-1 h-3.5 w-3.5 rounded-full bg-brand-600 ring-4 ring-surface"
                           aria-hidden="true"
                         />
 

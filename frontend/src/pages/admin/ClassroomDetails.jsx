@@ -648,8 +648,8 @@ export default function ClassroomDetails() {
                             onClick={() => handleDeviceStatus(device)}
                             className={`btn btn-sm border ${
                               active
-                                ? "border-amber-200 bg-white text-amber-700 hover:bg-amber-50"
-                                : "border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50"
+                                ? "border-amber-200 bg-surface text-amber-700 hover:bg-amber-50"
+                                : "border-emerald-200 bg-surface text-emerald-700 hover:bg-emerald-50"
                             }`}
                           >
                             <Icon name="power" className="h-3.5 w-3.5" />

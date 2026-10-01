@@ -1,11 +1,29 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="light">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#0a0f1e" />
+    <meta name="color-scheme" content="light dark" />
     <meta name="description" content="SIMMS — Smart Classroom Infrastructure Monitoring System" />
+    <!-- Apply the saved (or system) theme before first paint to avoid a flash. Keep in sync with src/lib/theme.js. -->
+    <script>
+      (function () {
+        var theme = "light";
+        try {
+          var stored = localStorage.getItem("simms.theme");
+          if (stored === "light" || stored === "dark") theme = stored;
+          else if (window.matchMedia("(prefers-color-scheme: dark)").matches) theme = "dark";
+        } catch (e) {}
+        document.documentElement.setAttribute("data-theme", theme);
+        if (theme === "dark") document.querySelector('meta[name="theme-color"]').setAttribute("content", "#0b1020");
+      })();
+    </script>
+    <style>
+      html[data-theme="light"] { background: #f4f6fa; color-scheme: light; }
+      html[data-theme="dark"] { background: #0b1020; color-scheme: dark; }
+    </style>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link

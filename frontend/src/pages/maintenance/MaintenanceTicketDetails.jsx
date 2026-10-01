@@ -386,7 +386,7 @@ export default function MaintenanceTicketDetails() {
           )}
 
           {isClosed ? (
-            <div className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3.5">
+            <div className="flex items-center gap-3 rounded-lg border border-slate-200 bg-surface px-4 py-3.5">
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
                 <Icon name="lock" className="h-[18px] w-[18px]" />
               </span>
@@ -714,7 +714,7 @@ function WorkflowStep({
 function HistoryItem({ item }) {
   return (
     <li className="relative pl-5">
-      <span className="absolute -left-[5px] top-1.5 h-2.5 w-2.5 rounded-full bg-brand-500 ring-4 ring-white" aria-hidden="true" />
+      <span className="absolute -left-[5px] top-1.5 h-2.5 w-2.5 rounded-full bg-brand-500 ring-4 ring-surface" aria-hidden="true" />
 
       <div className="flex flex-wrap items-center gap-1.5">
         {item.previous_status && (

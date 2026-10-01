@@ -1,6 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
+import { AnimatePresence, LayoutGroup, motion, useMotionValueEvent, useScroll } from "framer-motion";
 import Icon from "./Icon";
+import ThemeToggle from "./ThemeToggle";
 import { logout } from "../lib/session";
+import { DURATION, EASE_IN, EASE_OUT, SPRING_SNAPPY, SPRING_SOFT, revealContainer } from "../lib/motion";
 
 const API_BASE_URL = "http://localhost:8000";
 const COLLAPSE_KEY = "simms.sidebarCollapsed";
@@ -109,7 +112,7 @@ function initials(name) {
 export function BrandMark({ className = "h-9 w-9", textClass = "text-base" }) {
   return (
     <div
-      className={`relative flex items-center justify-center overflow-hidden rounded-[10px] bg-gradient-to-br from-brand-500 to-brand-700 font-extrabold text-white shadow-[0_6px_16px_-6px_rgb(66_99_235/0.7)] ring-1 ring-white/15 ${className} ${textClass}`}
+      className={`relative flex items-center justify-center overflow-hidden rounded-[10px] bg-gradient-to-br from-brand-500 to-primary-hover font-extrabold text-white shadow-[0_6px_16px_-6px_rgb(66_99_235/0.7)] ring-1 ring-white/15 ${className} ${textClass}`}
     >
       <span className="relative z-10">S</span>
       <span className="absolute -right-2 -top-2 h-5 w-5 rounded-full bg-white/20 blur-[6px]" />
@@ -117,41 +120,68 @@ export function BrandMark({ className = "h-9 w-9", textClass = "text-base" }) {
   );
 }
 
-function NavLink({ item, active, collapsed, badge, onNavigate }) {
+// Labels fade in when the user expands the sidebar, but not on page load.
+const LABEL_IN = { opacity: 0, x: -6 };
+const LABEL_SHOW = { opacity: 1, x: 0, transition: { duration: DURATION.fast, ease: EASE_OUT } };
+
+function NavLink({ item, active, collapsed, badge, hovered, animateLabels, onHover, onNavigate }) {
   return (
     <a
       href={item.path}
       onClick={onNavigate}
+      onMouseEnter={onHover}
+      onFocus={onHover}
       aria-current={active ? "page" : undefined}
       title={collapsed ? item.label : undefined}
       className={`group relative flex h-10 items-center rounded-lg text-[13px] font-medium transition-colors duration-150 ${
         collapsed ? "justify-center px-0" : "gap-3 px-3"
-      } ${
-        active
-          ? "bg-white/[0.08] text-white"
-          : "text-ink-300 hover:bg-white/[0.04] hover:text-white"
-      }`}
+      } ${active ? "bg-white/[0.08] text-white" : "text-ink-300 hover:text-white"}`}
     >
+      {/* Hover highlight glides between items (shared layoutId per sidebar) */}
+      {hovered && !active && (
+        <motion.span
+          layoutId="nav-hover"
+          className="absolute inset-0 rounded-lg bg-white/[0.05]"
+          transition={SPRING_SNAPPY}
+          aria-hidden="true"
+        />
+      )}
+
       {active && (
-        <span className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-brand-400" />
+        <motion.span
+          className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-brand-400"
+          initial={{ scaleY: 0, opacity: 0 }}
+          animate={{ scaleY: 1, opacity: 1 }}
+          transition={{ ...SPRING_SOFT, delay: 0.05 }}
+          aria-hidden="true"
+        />
       )}
 
       <Icon
         name={item.icon}
-        className={`h-[18px] w-[18px] ${
+        className={`relative h-[18px] w-[18px] transition-colors duration-150 ${
           active ? "text-brand-300" : "text-ink-400 group-hover:text-ink-200"
         }`}
       />
 
-      {!collapsed && <span className="flex-1 truncate">{item.label}</span>}
+      {!collapsed && (
+        <motion.span className="relative flex-1 truncate" initial={animateLabels ? LABEL_IN : false} animate={LABEL_SHOW}>
+          {item.label}
+        </motion.span>
+      )}
 
       {badge > 0 &&
         (collapsed ? (
           <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-red-500 ring-2 ring-ink-950" />
         ) : (
-          <span className="num rounded-full bg-red-500/90 px-1.5 py-px text-[10px] font-semibold text-white">
+          <motion.span
+            className="num relative rounded-full bg-red-500/90 px-1.5 py-px text-[10px] font-semibold text-white"
+            initial={{ scale: 0.6, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={SPRING_SNAPPY}
+          >
             {badge > 99 ? "99+" : badge}
-          </span>
+          </motion.span>
         ))}
 
       {badge > 0 && <span className="sr-only">, {badge} unread</span>}
@@ -159,7 +189,11 @@ function NavLink({ item, active, collapsed, badge, onNavigate }) {
   );
 }
 
-function SidebarContent({ nav, currentPath, collapsed, badges, onNavigate, onToggleCollapse, onClose, user }) {
+function SidebarContent({ nav, currentPath, collapsed, badges, animateLabels = false, onNavigate, onToggleCollapse, onClose, user }) {
+  // Desktop sidebar and mobile drawer each get their own layout scope.
+  const layoutScope = useId();
+  const [hoveredPath, setHoveredPath] = useState(null);
+
   return (
     <div className="flex h-full flex-col">
       {/* Brand */}
@@ -171,10 +205,10 @@ function SidebarContent({ nav, currentPath, collapsed, badges, onNavigate, onTog
         <a href={nav.home} className="flex min-w-0 items-center gap-3" aria-label="SIMMS home">
           <BrandMark />
           {!collapsed && (
-            <div className="min-w-0 leading-tight">
+            <motion.div className="min-w-0 leading-tight" initial={animateLabels ? LABEL_IN : false} animate={LABEL_SHOW}>
               <p className="text-[15px] font-bold tracking-[0.14em] text-white">SIMMS</p>
               <p className="truncate text-[11px] font-medium text-ink-400">{nav.console}</p>
-            </div>
+            </motion.div>
           )}
         </a>
 
@@ -186,47 +220,63 @@ function SidebarContent({ nav, currentPath, collapsed, badges, onNavigate, onTog
       </div>
 
       {/* Navigation */}
-      <nav aria-label="Primary" className="hide-scrollbar flex-1 overflow-y-auto px-3 py-5">
-        {nav.sections.map((section, index) => (
-          <div key={section.title} className={index > 0 ? "mt-6" : ""}>
-            {collapsed ? (
-              index > 0 && <div className="mx-3 mb-3 h-px bg-white/[0.06]" />
-            ) : (
-              <p className="mb-2 px-3 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-500">
-                {section.title}
-              </p>
-            )}
-            <ul className="space-y-0.5">
-              {section.items.map((item) => (
-                <li key={item.path}>
-                  <NavLink
-                    item={item}
-                    active={isActive(item.path, currentPath)}
-                    collapsed={collapsed}
-                    badge={item.badgeKey ? badges[item.badgeKey] : 0}
-                    onNavigate={onNavigate}
-                  />
-                </li>
-              ))}
-            </ul>
-          </div>
-        ))}
-
-        {!collapsed && (
-          <div className="mt-8 rounded-xl border border-white/[0.06] bg-white/[0.03] p-3.5">
-            <div className="flex items-center gap-2">
-              <span className="relative flex h-2 w-2">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60 motion-reduce:hidden" />
-                <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
-              </span>
-              <span className="text-xs font-semibold text-ink-100">Monitoring active</span>
+      <LayoutGroup id={layoutScope}>
+        <nav
+          aria-label="Primary"
+          className="hide-scrollbar flex-1 overflow-y-auto px-3 py-5"
+          onMouseLeave={() => setHoveredPath(null)}
+          onBlur={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget)) setHoveredPath(null);
+          }}
+        >
+          {nav.sections.map((section, index) => (
+            <div key={section.title} className={index > 0 ? "mt-6" : ""}>
+              {collapsed ? (
+                index > 0 && <div className="mx-3 mb-3 h-px bg-white/[0.06]" />
+              ) : (
+                <p className="mb-2 px-3 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-500">
+                  {section.title}
+                </p>
+              )}
+              <ul className="space-y-0.5">
+                {section.items.map((item) => (
+                  <li key={item.path}>
+                    <NavLink
+                      item={item}
+                      active={isActive(item.path, currentPath)}
+                      collapsed={collapsed}
+                      badge={item.badgeKey ? badges[item.badgeKey] : 0}
+                      hovered={hoveredPath === item.path}
+                      animateLabels={animateLabels}
+                      onHover={() => setHoveredPath(item.path)}
+                      onNavigate={onNavigate}
+                    />
+                  </li>
+                ))}
+              </ul>
             </div>
-            <p className="mt-1.5 text-[11px] leading-relaxed text-ink-400">
-              Sensors and vision pipeline are reporting to SIMMS.
-            </p>
-          </div>
-        )}
-      </nav>
+          ))}
+
+          {!collapsed && (
+            <motion.div
+              className="mt-8 rounded-xl border border-white/[0.06] bg-white/[0.03] p-3.5"
+              initial={animateLabels ? LABEL_IN : false}
+              animate={LABEL_SHOW}
+            >
+              <div className="flex items-center gap-2">
+                <span className="relative flex h-2 w-2">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60 motion-reduce:hidden" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
+                </span>
+                <span className="text-xs font-semibold text-ink-100">Monitoring active</span>
+              </div>
+              <p className="mt-1.5 text-[11px] leading-relaxed text-ink-400">
+                Sensors and vision pipeline are reporting to SIMMS.
+              </p>
+            </motion.div>
+          )}
+        </nav>
+      </LayoutGroup>
 
       {/* Footer */}
       <div className="shrink-0 border-t border-white/[0.06] p-3">
@@ -298,7 +348,9 @@ export default function AppShell({ title, eyebrow, backHref, actions, unreadCoun
   };
 
   const [collapsed, setCollapsed] = useState(readCollapsed);
+  const [hasToggledCollapse, setHasToggledCollapse] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
   const [fetchedUnread, setFetchedUnread] = useState(0);
 
   const badges = { unread: unreadCount ?? fetchedUnread };
@@ -359,18 +411,22 @@ export default function AppShell({ title, eyebrow, backHref, actions, unreadCoun
     document.title = title ? `${title} · SIMMS` : "SIMMS";
   }, [title]);
 
+  // Lift the top bar with a shadow once content scrolls beneath it.
+  const { scrollY } = useScroll();
+  useMotionValueEvent(scrollY, "change", (value) => setScrolled(value > 4));
+
   return (
     <div className="min-h-dvh bg-canvas text-slate-900">
       <a
         href="#main"
-        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:rounded-lg focus:bg-white focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:shadow-raised"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:rounded-lg focus:bg-surface focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:shadow-raised"
       >
         Skip to content
       </a>
 
       {/* Desktop sidebar */}
       <aside
-        className={`fixed inset-y-0 left-0 z-40 hidden bg-ink-950 transition-[width] duration-200 ease-out lg:block ${
+        className={`fixed inset-y-0 left-0 z-40 hidden bg-ink-950 transition-[width] duration-200 ease-out lg:block dark:border-r dark:border-white/[0.06] ${
           collapsed ? "w-[72px]" : "w-60"
         }`}
       >
@@ -380,32 +436,53 @@ export default function AppShell({ title, eyebrow, backHref, actions, unreadCoun
           collapsed={collapsed}
           badges={badges}
           user={user}
-          onToggleCollapse={() => setCollapsed((value) => !value)}
+          animateLabels={hasToggledCollapse}
+          onToggleCollapse={() => {
+            setHasToggledCollapse(true);
+            setCollapsed((value) => !value);
+          }}
         />
       </aside>
 
       {/* Mobile drawer */}
-      {mobileOpen && (
-        <div className="fixed inset-0 z-50 lg:hidden" role="dialog" aria-modal="true" aria-label="Navigation">
-          <div className="absolute inset-0 animate-fade-in bg-ink-950/60 backdrop-blur-sm" onClick={() => setMobileOpen(false)} />
-          <aside className="absolute inset-y-0 left-0 w-72 max-w-[85vw] animate-slide-in-left bg-ink-950 shadow-overlay">
-            <SidebarContent
-              nav={nav}
-              currentPath={currentPath}
-              collapsed={false}
-              badges={badges}
-              user={user}
-              onClose={() => setMobileOpen(false)}
-              onNavigate={() => setMobileOpen(false)}
+      <AnimatePresence>
+        {mobileOpen && (
+          <div className="fixed inset-0 z-50 lg:hidden" role="dialog" aria-modal="true" aria-label="Navigation">
+            <motion.div
+              className="absolute inset-0 bg-ink-950/60 backdrop-blur-sm"
+              onClick={() => setMobileOpen(false)}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1, transition: { duration: DURATION.fast, ease: EASE_OUT } }}
+              exit={{ opacity: 0, transition: { duration: DURATION.exit, ease: EASE_IN } }}
             />
-          </aside>
-        </div>
-      )}
+            <motion.aside
+              className="absolute inset-y-0 left-0 w-72 max-w-[85vw] bg-ink-950 shadow-overlay dark:border-r dark:border-white/[0.06]"
+              initial={{ x: "-100%" }}
+              animate={{ x: 0, transition: SPRING_SOFT }}
+              exit={{ x: "-100%", transition: { duration: DURATION.fast, ease: EASE_IN } }}
+            >
+              <SidebarContent
+                nav={nav}
+                currentPath={currentPath}
+                collapsed={false}
+                badges={badges}
+                user={user}
+                onClose={() => setMobileOpen(false)}
+                onNavigate={() => setMobileOpen(false)}
+              />
+            </motion.aside>
+          </div>
+        )}
+      </AnimatePresence>
 
       <div className={`min-h-dvh transition-[padding] duration-200 ease-out ${collapsed ? "lg:pl-[72px]" : "lg:pl-60"}`}>
         {/* Top bar */}
-        <header className="sticky top-0 z-30 border-b border-slate-200/80 bg-white/85 backdrop-blur-md supports-[backdrop-filter]:bg-white/75">
-          <div className="flex h-16 items-center gap-3 px-4 sm:px-6 lg:px-8">
+        <header
+          className={`sticky top-0 z-30 border-b border-slate-200/80 bg-surface/85 backdrop-blur-md transition-shadow duration-200 supports-[backdrop-filter]:bg-surface/75 ${
+            scrolled ? "shadow-raised" : ""
+          }`}
+        >
+          <div className="flex h-16 items-center gap-2 px-4 sm:gap-3 sm:px-6 lg:px-8">
             <button
               type="button"
               onClick={() => setMobileOpen(true)}
@@ -415,8 +492,11 @@ export default function AppShell({ title, eyebrow, backHref, actions, unreadCoun
               <Icon name="menu" className="h-5 w-5" />
             </button>
 
+            <ThemeToggle />
+            <span className="hidden h-6 w-px shrink-0 bg-slate-200 sm:block" aria-hidden="true" />
+
             {backHref && (
-              <a href={backHref} className="btn-icon border border-slate-200 bg-white shadow-xs" aria-label="Go back">
+              <a href={backHref} className="btn-icon border border-slate-200 bg-surface shadow-xs hover:border-slate-300" aria-label="Go back">
                 <Icon name="arrowLeft" className="h-4 w-4" />
               </a>
             )}
@@ -430,9 +510,17 @@ export default function AppShell({ title, eyebrow, backHref, actions, unreadCoun
           </div>
         </header>
 
-        <main id="main" tabIndex={-1} className={`mx-auto w-full px-4 py-6 outline-none sm:px-6 lg:px-8 lg:py-8 ${wide ? "" : "max-w-[1440px]"}`}>
+        {/* Cards, stat tiles and alerts inside cascade in (see lib/motion.js) */}
+        <motion.main
+          id="main"
+          tabIndex={-1}
+          className={`mx-auto w-full px-4 py-6 outline-none sm:px-6 lg:px-8 lg:py-8 ${wide ? "" : "max-w-[1440px]"}`}
+          variants={revealContainer}
+          initial="hidden"
+          animate="show"
+        >
           {children}
-        </main>
+        </motion.main>
       </div>
     </div>
   );

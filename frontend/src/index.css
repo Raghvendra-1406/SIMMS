@@ -1,10 +1,16 @@
 @import "tailwindcss";
 
+/* `dark:` utilities follow the explicit theme attribute set on <html>. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
 /* =========================================================
    SIMMS design tokens
-   - brand: primary actions, active nav, focus
-   - ink:   sidebar / dark surfaces
-   - canvas: app background
+   - brand:   accents, active nav, focus, tints
+   - primary / danger / success / accent: SOLID fills behind white
+     text (buttons, markers). They keep their value in dark mode,
+     while the palette shades are remapped for readability.
+   - ink:     sidebar / always-dark surfaces
+   - canvas:  app background, surface: cards, inputs, popovers
    Status colours (emerald / amber / red / sky / violet) use
    Tailwind defaults and are reserved for health + workflow state.
    ========================================================= */
@@ -37,6 +43,17 @@
   --color-ink-950: #0a0f1e;
 
   --color-canvas: #f4f6fa;
+  --color-surface: #ffffff;
+
+  --color-primary: #4263eb;
+  --color-primary-hover: #3b5bdb;
+  --color-primary-active: #364fc7;
+  --color-danger: oklch(57.7% 0.245 27.325);
+  --color-danger-hover: oklch(50.5% 0.213 27.518);
+  --color-danger-active: oklch(44.4% 0.177 26.899);
+  --color-success: oklch(59.6% 0.145 163.225);
+  --color-success-hover: oklch(50.8% 0.118 165.612);
+  --color-accent: oklch(54.1% 0.281 293.009);
 
   --shadow-card: 0 1px 2px rgb(16 24 40 / 0.04), 0 1px 3px rgb(16 24 40 / 0.04);
   --shadow-raised: 0 4px 12px -2px rgb(16 24 40 / 0.08), 0 2px 4px -2px rgb(16 24 40 / 0.04);
@@ -45,6 +62,7 @@
   --animate-fade-in: fade-in 180ms ease-out;
   --animate-slide-up: slide-up 220ms cubic-bezier(0.16, 1, 0.3, 1);
   --animate-slide-in-left: slide-in-left 240ms cubic-bezier(0.16, 1, 0.3, 1);
+  --animate-shimmer: shimmer 1.4s ease-in-out infinite;
 
   @keyframes fade-in {
     from { opacity: 0; }
@@ -58,6 +76,122 @@
     from { transform: translateX(-100%); }
     to { transform: translateX(0); }
   }
+  @keyframes shimmer {
+    from { background-position: 150% 0; }
+    to { background-position: -50% 0; }
+  }
+}
+
+/* =========================================================
+   Dark theme
+   Pages are written with slate + status utilities, so dark mode
+   is a token remap rather than per-page `dark:` classes:
+   - slate is re-toned to a navy scale (50 = raised fill,
+     200 = border, 500 = secondary text, 900 = primary text)
+   - status 50/100/200 become translucent tints; 600–950 become
+     the lighter tones that stay readable on dark surfaces
+   - 300/400/500 are unchanged, which keeps the always-dark
+     sidebar and login panel identical in both themes
+   Every text pair below is ≥ 4.5:1 on surface and slate-100.
+   ========================================================= */
+:root {
+  --skeleton-sheen: rgb(255 255 255 / 0.65);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --color-canvas: #0b1020;
+  --color-surface: #121a2b;
+  --skeleton-sheen: rgb(255 255 255 / 0.05);
+
+  --color-slate-50: #172033;
+  --color-slate-100: #1c263b;
+  --color-slate-200: #27324b;
+  --color-slate-300: #36425e;
+  --color-slate-400: #8591a8;
+  --color-slate-500: #a0abbf;
+  --color-slate-600: #b8c1d1;
+  --color-slate-700: #cdd4df;
+  --color-slate-800: #dfe4ec;
+  --color-slate-900: #eef1f6;
+  --color-slate-950: #f7f8fb;
+
+  --color-brand-50: color-mix(in oklab, #5c7cfa 14%, transparent);
+  --color-brand-100: color-mix(in oklab, #5c7cfa 22%, transparent);
+  --color-brand-200: color-mix(in oklab, #748ffc 34%, transparent);
+  --color-brand-600: #748ffc;
+  --color-brand-700: #91a7ff;
+  --color-brand-800: #bac8ff;
+  --color-brand-900: #dbe4ff;
+  --color-brand-950: #eef3ff;
+
+  --color-red-50: color-mix(in oklab, oklch(63.7% 0.237 25.331) 13%, transparent);
+  --color-red-100: color-mix(in oklab, oklch(63.7% 0.237 25.331) 20%, transparent);
+  --color-red-200: color-mix(in oklab, oklch(70.4% 0.191 22.216) 32%, transparent);
+  --color-red-600: oklch(70.4% 0.191 22.216);
+  --color-red-700: oklch(80.8% 0.114 19.571);
+  --color-red-800: oklch(88.5% 0.062 18.334);
+  --color-red-900: oklch(93.6% 0.032 17.717);
+  --color-red-950: oklch(97.1% 0.013 17.38);
+
+  --color-orange-50: color-mix(in oklab, oklch(70.5% 0.213 47.604) 13%, transparent);
+  --color-orange-100: color-mix(in oklab, oklch(70.5% 0.213 47.604) 20%, transparent);
+  --color-orange-200: color-mix(in oklab, oklch(75% 0.183 55.934) 32%, transparent);
+  --color-orange-600: oklch(75% 0.183 55.934);
+  --color-orange-700: oklch(83.7% 0.128 66.29);
+  --color-orange-800: oklch(90.1% 0.076 70.697);
+  --color-orange-900: oklch(95.4% 0.038 75.164);
+  --color-orange-950: oklch(98% 0.016 73.684);
+
+  --color-amber-50: color-mix(in oklab, oklch(76.9% 0.188 70.08) 12%, transparent);
+  --color-amber-100: color-mix(in oklab, oklch(76.9% 0.188 70.08) 19%, transparent);
+  --color-amber-200: color-mix(in oklab, oklch(82.8% 0.189 84.429) 30%, transparent);
+  --color-amber-600: oklch(82.8% 0.189 84.429);
+  --color-amber-700: oklch(87.9% 0.169 91.605);
+  --color-amber-800: oklch(92.4% 0.12 95.746);
+  --color-amber-900: oklch(96.2% 0.059 95.617);
+  --color-amber-950: oklch(98.7% 0.022 95.277);
+
+  --color-green-50: color-mix(in oklab, oklch(72.3% 0.219 149.579) 12%, transparent);
+  --color-green-100: color-mix(in oklab, oklch(72.3% 0.219 149.579) 19%, transparent);
+  --color-green-200: color-mix(in oklab, oklch(79.2% 0.209 151.711) 30%, transparent);
+  --color-green-600: oklch(79.2% 0.209 151.711);
+  --color-green-700: oklch(87.1% 0.15 154.449);
+  --color-green-800: oklch(92.5% 0.084 155.995);
+  --color-green-900: oklch(96.2% 0.044 156.743);
+  --color-green-950: oklch(98.2% 0.018 155.826);
+
+  --color-emerald-50: color-mix(in oklab, oklch(69.6% 0.17 162.48) 13%, transparent);
+  --color-emerald-100: color-mix(in oklab, oklch(69.6% 0.17 162.48) 20%, transparent);
+  --color-emerald-200: color-mix(in oklab, oklch(76.5% 0.177 163.223) 30%, transparent);
+  --color-emerald-600: oklch(76.5% 0.177 163.223);
+  --color-emerald-700: oklch(84.5% 0.143 164.978);
+  --color-emerald-800: oklch(90.5% 0.093 164.15);
+  --color-emerald-900: oklch(95% 0.052 163.051);
+  --color-emerald-950: oklch(97.9% 0.021 166.113);
+
+  --color-sky-50: color-mix(in oklab, oklch(68.5% 0.169 237.323) 13%, transparent);
+  --color-sky-100: color-mix(in oklab, oklch(68.5% 0.169 237.323) 20%, transparent);
+  --color-sky-200: color-mix(in oklab, oklch(74.6% 0.16 232.661) 32%, transparent);
+  --color-sky-600: oklch(74.6% 0.16 232.661);
+  --color-sky-700: oklch(82.8% 0.111 230.318);
+  --color-sky-800: oklch(90.1% 0.058 230.902);
+  --color-sky-900: oklch(95.1% 0.026 236.824);
+  --color-sky-950: oklch(97.7% 0.013 236.62);
+
+  --color-violet-50: color-mix(in oklab, oklch(60.6% 0.25 292.717) 15%, transparent);
+  --color-violet-100: color-mix(in oklab, oklch(60.6% 0.25 292.717) 22%, transparent);
+  --color-violet-200: color-mix(in oklab, oklch(70.2% 0.183 293.541) 34%, transparent);
+  --color-violet-600: oklch(70.2% 0.183 293.541);
+  --color-violet-700: oklch(81.1% 0.111 293.571);
+  --color-violet-800: oklch(89.4% 0.057 293.283);
+  --color-violet-900: oklch(94.3% 0.029 294.588);
+  --color-violet-950: oklch(96.9% 0.016 293.756);
+
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.35), inset 0 1px 0 rgb(255 255 255 / 0.025);
+  --shadow-raised: 0 10px 28px -8px rgb(0 0 0 / 0.55), 0 2px 6px -2px rgb(0 0 0 / 0.4), inset 0 1px 0 rgb(255 255 255 / 0.03);
+  --shadow-overlay: 0 28px 64px -12px rgb(0 0 0 / 0.7), 0 0 0 1px rgb(255 255 255 / 0.05);
 }
 
 /* =========================================================
@@ -68,6 +202,7 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
+    color-scheme: light;
   }
 
   body {
@@ -86,6 +221,12 @@
   select:not(:disabled),
   summary {
     cursor: pointer;
+  }
+
+  button,
+  a[href],
+  [role="button"] {
+    touch-action: manipulation;
   }
 
   ::selection {
@@ -110,12 +251,32 @@
 }
 
 /* =========================================================
+   Theme switch
+   The toggle swaps themes inside a View Transition and reveals the
+   new theme with a circle grown from the button (see lib/theme.js).
+   Element transitions are paused for that frame so colours don't
+   animate twice.
+   ========================================================= */
+:root.theme-switching,
+:root.theme-switching *,
+:root.theme-switching *::before,
+:root.theme-switching *::after {
+  transition: none !important;
+}
+
+:root.theme-switching::view-transition-old(root),
+:root.theme-switching::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+/* =========================================================
    Component classes — use these in pages for consistency
    ========================================================= */
 @layer components {
   /* Surfaces */
   .card {
-    @apply rounded-xl border border-slate-200/80 bg-white shadow-card;
+    @apply rounded-xl border border-slate-200/80 bg-surface shadow-card;
   }
   .card-hover {
     @apply transition-[box-shadow,border-color] duration-200 hover:border-slate-300 hover:shadow-raised;
@@ -137,9 +298,9 @@
     @apply text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500;
   }
 
-  /* Buttons */
+  /* Buttons — press feedback is a 2% scale, never a layout change */
   .btn {
-    @apply inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-lg px-3.5 text-sm font-semibold whitespace-nowrap transition-colors duration-150 select-none disabled:pointer-events-none disabled:opacity-50;
+    @apply inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-lg px-3.5 text-sm font-semibold whitespace-nowrap transition-[color,background-color,border-color,box-shadow,scale] duration-150 ease-out select-none active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50;
   }
   .btn-sm {
     @apply h-8 gap-1.5 px-2.5 text-xs;
@@ -148,25 +309,25 @@
     @apply h-11 px-5 text-sm;
   }
   .btn-primary {
-    @apply bg-brand-600 text-white shadow-sm hover:bg-brand-700 active:bg-brand-800;
+    @apply bg-primary text-white shadow-sm hover:bg-primary-hover active:bg-primary-active;
   }
   .btn-secondary {
-    @apply border border-slate-200 bg-white text-slate-700 shadow-sm hover:border-slate-300 hover:bg-slate-50 active:bg-slate-100;
+    @apply border border-slate-200 bg-surface text-slate-700 shadow-sm hover:border-slate-300 hover:bg-slate-50 active:bg-slate-100;
   }
   .btn-ghost {
     @apply text-slate-600 hover:bg-slate-100 hover:text-slate-900;
   }
   .btn-danger {
-    @apply bg-red-600 text-white shadow-sm hover:bg-red-700 active:bg-red-800;
+    @apply bg-danger text-white shadow-sm hover:bg-danger-hover active:bg-danger-active;
   }
   .btn-danger-soft {
-    @apply border border-red-200 bg-white text-red-600 hover:bg-red-50;
+    @apply border border-red-200 bg-surface text-red-600 hover:bg-red-50;
   }
   .btn-success {
-    @apply bg-emerald-600 text-white shadow-sm hover:bg-emerald-700;
+    @apply bg-success text-white shadow-sm hover:bg-success-hover;
   }
   .btn-icon {
-    @apply inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 disabled:opacity-50;
+    @apply inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-500 transition-[color,background-color,border-color,scale] duration-150 ease-out hover:bg-slate-100 hover:text-slate-900 active:scale-[0.94] disabled:opacity-50;
   }
 
   /* Forms */
@@ -174,13 +335,13 @@
     @apply mb-1.5 block text-xs font-semibold text-slate-700;
   }
   .input {
-    @apply block h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 shadow-xs transition-[border-color,box-shadow] duration-150 outline-none placeholder:text-slate-400 hover:border-slate-300 focus:border-brand-500 focus:ring-4 focus:ring-brand-500/15 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500;
+    @apply block h-10 w-full rounded-lg border border-slate-200 bg-surface px-3 text-sm text-slate-900 shadow-xs transition-[border-color,box-shadow] duration-150 outline-none placeholder:text-slate-400 hover:border-slate-300 focus:border-brand-500 focus:ring-4 focus:ring-brand-500/15 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500;
   }
   .textarea {
-    @apply block min-h-24 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-xs transition-[border-color,box-shadow] duration-150 outline-none placeholder:text-slate-400 hover:border-slate-300 focus:border-brand-500 focus:ring-4 focus:ring-brand-500/15;
+    @apply block min-h-24 w-full rounded-lg border border-slate-200 bg-surface px-3 py-2.5 text-sm text-slate-900 shadow-xs transition-[border-color,box-shadow] duration-150 outline-none placeholder:text-slate-400 hover:border-slate-300 focus:border-brand-500 focus:ring-4 focus:ring-brand-500/15;
   }
   .select {
-    @apply block h-10 w-full appearance-none rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 shadow-xs transition-[border-color,box-shadow] duration-150 outline-none hover:border-slate-300 focus:border-brand-500 focus:ring-4 focus:ring-brand-500/15 disabled:cursor-not-allowed disabled:bg-slate-50 bg-[url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%20fill='none'%20stroke='%2364748b'%20stroke-width='2'%20stroke-linecap='round'%20stroke-linejoin='round'%3E%3Cpath%20d='m6%209%206%206%206-6'/%3E%3C/svg%3E")] bg-[length:16px_16px] bg-[right_0.65rem_center] bg-no-repeat pr-9;
+    @apply block h-10 w-full appearance-none rounded-lg border border-slate-200 bg-surface px-3 text-sm text-slate-900 shadow-xs transition-[border-color,box-shadow] duration-150 outline-none hover:border-slate-300 focus:border-brand-500 focus:ring-4 focus:ring-brand-500/15 disabled:cursor-not-allowed disabled:bg-slate-50 bg-[url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%20fill='none'%20stroke='%2364748b'%20stroke-width='2'%20stroke-linecap='round'%20stroke-linejoin='round'%3E%3Cpath%20d='m6%209%206%206%206-6'/%3E%3C/svg%3E")] bg-[length:16px_16px] bg-[right_0.65rem_center] bg-no-repeat pr-9;
   }
   .help-text {
     @apply mt-1.5 text-xs text-slate-500;
@@ -209,21 +370,24 @@
     @apply border-b-0;
   }
 
-  /* Tabs / filter chips */
+  /* Tabs / filter chips (the Segmented component adds a sliding pill) */
   .segmented {
     @apply inline-flex items-center gap-1 rounded-lg bg-slate-100 p-1;
   }
   .segmented-item {
-    @apply inline-flex h-7 items-center gap-1.5 rounded-md px-3 text-xs font-semibold text-slate-600 transition-colors hover:text-slate-900;
+    @apply relative inline-flex h-7 items-center gap-1.5 rounded-md px-3 text-xs font-semibold text-slate-600 transition-colors hover:text-slate-900;
   }
   .segmented-item-active {
-    @apply bg-white text-slate-900 shadow-sm;
+    @apply bg-surface text-slate-900 shadow-sm;
+  }
+  .segmented-pill {
+    @apply absolute inset-0 rounded-md bg-surface shadow-sm ring-1 ring-slate-900/[0.04];
   }
   .chip {
-    @apply inline-flex h-8 items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 transition-colors hover:border-slate-300 hover:text-slate-900;
+    @apply inline-flex h-8 items-center gap-1.5 rounded-full border border-slate-200 bg-surface px-3 text-xs font-semibold text-slate-600 transition-[color,background-color,border-color,scale] duration-150 hover:border-slate-300 hover:text-slate-900 active:scale-[0.97];
   }
   .chip-active {
-    @apply border-brand-600 bg-brand-600 text-white hover:border-brand-700 hover:text-white;
+    @apply border-primary bg-primary text-white hover:border-primary-hover hover:bg-primary-hover hover:text-white;
   }
 
   /* Data */
@@ -237,9 +401,17 @@
     @apply h-px w-full bg-slate-100;
   }
 
-  /* Skeleton */
+  /* Skeleton — a soft sweep reads as "loading" better than a pulse */
   .skeleton {
-    @apply animate-pulse rounded-md bg-slate-200/70;
+    @apply animate-shimmer rounded-md bg-slate-200/70;
+    background-image: linear-gradient(
+      100deg,
+      transparent 20%,
+      var(--skeleton-sheen) 50%,
+      transparent 80%
+    );
+    background-size: 200% 100%;
+    background-repeat: no-repeat;
   }
 }
 

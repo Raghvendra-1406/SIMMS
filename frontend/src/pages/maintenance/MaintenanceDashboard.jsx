@@ -586,8 +586,8 @@ function MaintenanceDashboard() {
                 <span
                   className={`flex h-8 w-8 items-center justify-center rounded-lg ${
                     step.active
-                      ? "bg-brand-600 text-white"
-                      : "bg-white text-slate-500 ring-1 ring-slate-200"
+                      ? "bg-primary text-white"
+                      : "bg-surface text-slate-500 ring-1 ring-slate-200"
                   }`}
                 >
                   <Icon name={step.icon} className="h-4 w-4" />

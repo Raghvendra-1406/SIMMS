@@ -393,7 +393,7 @@ export default function AdminDashboard() {
                     healthSummary[segment.key] > 0 ? (
                       <div
                         key={segment.key}
-                        className={`${segment.bar} h-full border-r-2 border-white last:border-r-0`}
+                        className={`${segment.bar} h-full border-r-2 border-surface last:border-r-0`}
                         style={{ width: `${(healthSummary[segment.key] / monitoredTotal) * 100}%` }}
                       />
                     ) : null
@@ -494,7 +494,7 @@ export default function AdminDashboard() {
                       key={action.path}
                       type="button"
                       onClick={() => navigateTo(action.path)}
-                      className="group flex items-center gap-2.5 rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-left text-[13px] font-semibold text-slate-700 transition-colors hover:border-brand-200 hover:bg-brand-50/60 hover:text-brand-700"
+                      className="group flex items-center gap-2.5 rounded-lg border border-slate-200 bg-surface px-3 py-2.5 text-left text-[13px] font-semibold text-slate-700 transition-colors hover:border-brand-200 hover:bg-brand-50/60 hover:text-brand-700"
                     >
                       <Icon name={action.icon} className="h-4 w-4 text-slate-400 group-hover:text-brand-600" />
                       <span className="truncate">{action.label}</span>
