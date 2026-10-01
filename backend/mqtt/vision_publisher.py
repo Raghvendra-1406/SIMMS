@@ -9,6 +9,10 @@ from config.settings import (
     MQTT_BROKER_PORT,
 )
 
+from mqtt.connection import (
+    configure_client,
+)
+
 from mqtt.topics import (
     status_topic,
     vision_topic,
@@ -53,6 +57,8 @@ class VisionPublisher:
             callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
             client_id=f"{self.node_id}-{uuid.uuid4().hex[:6]}",
         )
+
+        configure_client(self.client)
 
         # If the runtime dies, the broker reports the camera OFFLINE.
         self.client.will_set(

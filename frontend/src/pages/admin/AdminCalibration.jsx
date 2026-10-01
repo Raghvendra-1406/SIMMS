@@ -12,7 +12,8 @@ import {
   StatusBadge,
 } from "../../components/ui";
 
-const API_BASE_URL = "http://localhost:8000";
+// Backend URL: VITE_API_BASE_URL at build time (see lib/api.js).
+import { API_BASE_URL } from "../../lib/api";
 
 function getAuthHeaders() {
   const token = localStorage.getItem("access_token");

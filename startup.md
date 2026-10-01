@@ -9,6 +9,8 @@ ESP32 node (Wokwi or real)   ──MQTT──►  Mosquitto  ◄──MQTT──
                          FastAPI backend (+ PostgreSQL)  ◄──REST──  React dashboard
 ```
 
+To put it online (Vercel + Render + HiveMQ Cloud + Neon, all free), see **[DEPLOY.md](DEPLOY.md)**.
+
 ## 1. Install first
 
 | Tool | Version | Why |

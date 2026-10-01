@@ -3,7 +3,8 @@ import Icon from "../../components/Icon";
 import { BrandMark } from "../../components/AppShell";
 import { Spinner } from "../../components/ui";
 
-const API_BASE_URL = "http://localhost:8000";
+// Backend URL: VITE_API_BASE_URL at build time (see lib/api.js).
+import { API_BASE_URL } from "../../lib/api";
 
 export default function Login() {
   const [email, setEmail] = useState("");

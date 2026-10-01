@@ -163,6 +163,16 @@ CREATE TABLE node_status (
 );
 
 
+-- Calibration reference images (kept in the database: ephemeral disks).
+CREATE TABLE calibration_images (
+    image_id UUID PRIMARY KEY,
+    content_type VARCHAR(40) NOT NULL,
+    data BYTEA NOT NULL,
+    created_by INTEGER REFERENCES users(user_id),
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+
 -- =========================================================
 -- INDEXES
 -- =========================================================

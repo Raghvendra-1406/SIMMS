@@ -14,7 +14,8 @@ import { statusTone } from "../../lib/format";
 import { navigateTo } from "../../lib/session";
 import { usePolling } from "../../lib/usePolling";
 
-const API_BASE_URL = "http://localhost:8000";
+// Backend URL: VITE_API_BASE_URL at build time (see lib/api.js).
+import { API_BASE_URL } from "../../lib/api";
 
 // CRITICAL is not part of the shared tone map, so resolve priority tones here.
 function priorityTone(priority) {

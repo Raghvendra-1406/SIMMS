@@ -26,6 +26,8 @@
 
 // Wokwi for VS Code forwards host.wokwi.internal to your PC, so this
 // reaches the Mosquitto broker running on your computer.
+// Cloud deployment (Render + HiveMQ Cloud): set this to your HiveMQ
+// cluster host and see MQTT_USE_TLS below; works from browser Wokwi too.
 // Fallback if your Wokwi licence has no private gateway: use a public
 // broker such as "broker.hivemq.com" here AND in backend/.env
 // (MQTT_BROKER_HOST), with a unique TOPIC_PREFIX in both.
@@ -41,6 +43,15 @@
 #endif
 
 #define MQTT_PORT 1883
+
+// Hosted broker (e.g. HiveMQ Cloud free tier): set MQTT_HOST to the
+// cluster URL (xxxx.s1.eu.hivemq.cloud), MQTT_PORT 8883, MQTT_USE_TLS 1
+// and the credentials created in the HiveMQ console. The same values go
+// in the backend's MQTT_* settings. Local Mosquitto: leave TLS off and
+// the credentials empty.
+#define MQTT_USE_TLS 0
+#define MQTT_USERNAME ""
+#define MQTT_PASSWORD ""
 
 // Must match MQTT_TOPIC_PREFIX in backend/.env ("" = none).
 #define TOPIC_PREFIX ""

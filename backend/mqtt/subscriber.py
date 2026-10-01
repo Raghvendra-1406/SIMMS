@@ -13,6 +13,10 @@ from config.settings import (
     MQTT_CLIENT_ID,
 )
 
+from mqtt.connection import (
+    configure_client,
+)
+
 from mqtt.topics import (
     command_topic,
     parse_topic,
@@ -503,6 +507,8 @@ def create_mqtt_client():
         callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
         client_id=f"{MQTT_CLIENT_ID}-{uuid.uuid4().hex[:6]}",
     )
+
+    configure_client(client)
 
     client.on_connect = on_connect
     client.on_disconnect = on_disconnect

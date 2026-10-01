@@ -26,6 +26,7 @@ from api.calibration_image import (
 from api.notifications import router as notification_router
 from api.live import router as live_router
 from services.scheduler import start_scheduler
+from config.settings import CORS_ORIGINS, CORS_ORIGIN_REGEX
 
 
 @asynccontextmanager
@@ -53,10 +54,8 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-    ],
+    allow_origins=CORS_ORIGINS,
+    allow_origin_regex=CORS_ORIGIN_REGEX,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

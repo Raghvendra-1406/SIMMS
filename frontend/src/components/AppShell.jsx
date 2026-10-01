@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import Icon from "./Icon";
 import { logout } from "../lib/session";
 
-const API_BASE_URL = "http://localhost:8000";
+// Backend URL: VITE_API_BASE_URL at build time (see lib/api.js).
+import { API_BASE_URL } from "../lib/api";
 const COLLAPSE_KEY = "simms.sidebarCollapsed";
 
 // Navigation per role. `match` decides the active item by path prefix.

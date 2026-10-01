@@ -1,9 +1,11 @@
 import { logout } from "./session";
 
-// Backend URL. Override with VITE_API_BASE_URL in frontend/.env.local,
-// e.g. VITE_API_BASE_URL=http://192.168.1.10:8000 to use it from a phone.
-export const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+// Backend URL, fixed at build time from VITE_API_BASE_URL
+// (frontend/.env.local locally, project env var on Vercel), e.g.
+// https://simms-backend.onrender.com. Trailing slashes are dropped.
+export const API_BASE_URL = (
+  import.meta.env.VITE_API_BASE_URL || "http://localhost:8000"
+).replace(/\/+$/, "");
 
 export function getAuthHeaders() {
   const token = localStorage.getItem("access_token");

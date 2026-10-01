@@ -55,6 +55,12 @@ MQTT_CLIENT_ID = os.getenv(
     "simms-backend"
 )
 
+# Hosted brokers (e.g. HiveMQ Cloud, port 8883) need TLS and a
+# username / password. Local Mosquitto needs neither.
+MQTT_USERNAME = os.getenv("MQTT_USERNAME") or None
+MQTT_PASSWORD = os.getenv("MQTT_PASSWORD") or None
+MQTT_TLS = os.getenv("MQTT_TLS", "").lower() in {"1", "true", "yes"}
+
 
 JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY")
 
@@ -132,3 +138,24 @@ HEALTH_INTERVAL_SECONDS = int(
         "60"
     )
 )
+
+
+
+# ---------------------------------------------------------
+# DEPLOYMENT
+# ---------------------------------------------------------
+
+# Browser origins allowed to call the API, comma separated,
+# e.g. "https://simms.vercel.app,http://localhost:5173".
+CORS_ORIGINS = [
+    origin.strip().rstrip("/")
+    for origin in os.getenv(
+        "CORS_ORIGINS",
+        "http://localhost:5173,http://127.0.0.1:5173"
+    ).split(",")
+    if origin.strip()
+]
+
+# Optional regex for extra origins, e.g. Vercel preview deployments:
+# "https://simms-frontend-.*\.vercel\.app"
+CORS_ORIGIN_REGEX = os.getenv("CORS_ORIGIN_REGEX") or None

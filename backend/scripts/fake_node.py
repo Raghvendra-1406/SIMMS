@@ -25,6 +25,7 @@ import time
 import paho.mqtt.client as mqtt
 
 from config.settings import MQTT_BROKER_HOST, MQTT_BROKER_PORT
+from mqtt.connection import configure_client
 from mqtt.topics import (
     command_topic,
     sensor_topic,
@@ -75,6 +76,8 @@ class FakeNode:
             callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
             client_id=f"{self.node_id}-{random.randint(0, 99999)}",
         )
+
+        configure_client(self.client)
 
         self.client.will_set(
             status_topic(self.room, self.node_id),

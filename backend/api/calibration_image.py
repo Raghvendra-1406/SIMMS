@@ -1,4 +1,3 @@
-import os
 import uuid
 
 from fastapi import (
@@ -7,25 +6,30 @@ from fastapi import (
     UploadFile,
     File,
     HTTPException,
+    Response,
     status,
 )
 
 from dependencies.auth_dependencies import require_admin
+
+from database.repositories.calibration_image_repository import (
+    get_calibration_image,
+    save_calibration_image,
+)
 
 router = APIRouter(
     prefix="/vision/calibration",
     tags=["Vision Calibration"]
 )
 
-UPLOAD_DIRECTORY = os.path.join(
-    "uploads",
-    "calibration"
-)
-
 MAX_IMAGE_BYTES = 10 * 1024 * 1024
 
+# Stored in the database (not on disk), so images survive restarts on
+# hosts with an ephemeral filesystem such as Render.
+IMAGE_PATH_PREFIX = "vision/calibration/images"
 
-def detect_image_extension(contents):
+
+def detect_image_type(contents):
     """
     Identify the image format from its magic bytes.
 
@@ -34,16 +38,16 @@ def detect_image_extension(contents):
     """
 
     if contents.startswith(b"\xff\xd8\xff"):
-        return ".jpg"
+        return "image/jpeg"
 
     if contents.startswith(b"\x89PNG\r\n\x1a\n"):
-        return ".png"
+        return "image/png"
 
     if contents.startswith(b"BM"):
-        return ".bmp"
+        return "image/bmp"
 
     if contents[:4] == b"RIFF" and contents[8:12] == b"WEBP":
-        return ".webp"
+        return "image/webp"
 
     return None
 
@@ -66,35 +70,23 @@ async def upload_calibration_image(
             detail="Image must be 10 MB or smaller."
         )
 
-    extension = detect_image_extension(contents)
+    content_type = detect_image_type(contents)
 
-    if extension is None:
+    if content_type is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Only JPEG, PNG, BMP and WebP images are allowed."
         )
 
-    os.makedirs(
-        UPLOAD_DIRECTORY,
-        exist_ok=True
-    )
-
-    filename = (
-        f"{uuid.uuid4().hex}"
-        f"{extension}"
-    )
-
-    file_path = os.path.join(
-        UPLOAD_DIRECTORY,
-        filename
-    )
+    image_id = str(uuid.uuid4())
 
     try:
-        with open(
-            file_path,
-            "wb"
-        ) as image_file:
-            image_file.write(contents)
+        save_calibration_image(
+            image_id=image_id,
+            content_type=content_type,
+            data=contents,
+            created_by=current_user["user_id"]
+        )
 
     except Exception:
         raise HTTPException(
@@ -104,5 +96,31 @@ async def upload_calibration_image(
 
     return {
         "message": "Calibration image uploaded successfully.",
-        "image_path": file_path
+        # The frontend loads it from <API>/<image_path>.
+        "image_path": f"{IMAGE_PATH_PREFIX}/{image_id}"
     }
+
+
+@router.get("/images/{image_id}")
+def download_calibration_image(image_id: uuid.UUID):
+    """
+    Serve a calibration image. Not behind login because <img> tags
+    cannot send the bearer token; the random UUID is the access key.
+    Calibration images show the empty classroom (Plan v2 §6.1).
+    """
+
+    image = get_calibration_image(str(image_id))
+
+    if image is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Image not found."
+        )
+
+    content_type, data = image
+
+    return Response(
+        content=data,
+        media_type=content_type,
+        headers={"Cache-Control": "private, max-age=86400"},
+    )

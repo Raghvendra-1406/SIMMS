@@ -14,6 +14,7 @@
 
 #include <Arduino.h>
 #include <WiFi.h>
+#include <WiFiClientSecure.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
 #include <DHTesp.h>
@@ -53,7 +54,14 @@ const String CAMERA_STATUS_TOPIC = baseTopic() + "/status/" + CAMERA_ID;
 // State
 // ---------------------------------------------------------
 
+#if MQTT_USE_TLS
+// Encrypted connection to a hosted broker. setInsecure() skips the
+// certificate check (fine for dry runs); for production load the
+// broker's CA certificate with wifiClient.setCACert(...).
+WiFiClientSecure wifiClient;
+#else
 WiFiClient wifiClient;
+#endif
 PubSubClient mqtt(wifiClient);
 DHTesp dht;
 
@@ -514,9 +522,12 @@ void connectMqtt() {
 
   Serial.printf("[mqtt] connecting to %s:%d ... ", MQTT_HOST, MQTT_PORT);
 
+  const char *username = strlen(MQTT_USERNAME) ? MQTT_USERNAME : nullptr;
+  const char *password = strlen(MQTT_PASSWORD) ? MQTT_PASSWORD : nullptr;
+
   bool ok = mqtt.connect(
     clientId.c_str(),
-    nullptr, nullptr,
+    username, password,
     NODE_STATUS_TOPIC.c_str(), 1, true, willPayload);
 
   if (!ok) {
@@ -573,6 +584,10 @@ void setup() {
 #endif
 
   connectWifi();
+
+#if MQTT_USE_TLS
+  wifiClient.setInsecure();
+#endif
 
   mqtt.setServer(MQTT_HOST, MQTT_PORT);
   mqtt.setCallback(onMqttMessage);
