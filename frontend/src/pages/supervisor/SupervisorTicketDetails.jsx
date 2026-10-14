@@ -12,6 +12,7 @@ import {
 } from "../../components/ui";
 import { formatLabel, formatConfidence } from "../../lib/format";
 import { navigateTo } from "../../lib/session";
+import TicketAssignmentCard from "../../components/TicketAssignment";
 
 // Backend URL: VITE_API_BASE_URL at build time (see lib/api.js).
 import { API_BASE_URL } from "../../lib/api";
@@ -858,6 +859,12 @@ export default function SupervisorTicketDetails() {
 
             {/* Side column */}
             <div className="min-w-0 space-y-6">
+              <TicketAssignmentCard
+                key={`${ticket.ticket_id}-${ticket.assigned_to ?? "none"}`}
+                ticket={ticket}
+                onUpdated={setTicket}
+              />
+
               <Card
                 title="Lifecycle"
                 subtitle="Key ticket milestones"

@@ -172,6 +172,25 @@ POWER_FACTOR_MIN_CURRENT_A = float(os.getenv("POWER_FACTOR_MIN_CURRENT_A", "1.0"
 
 
 # ---------------------------------------------------------
+# TICKET ROUTING AND SLA (Plan v2 §9)
+#
+# Response SLA per priority: staff must start work (or resolve) a
+# ticket within this many hours of it being raised or reopened.
+# HIGH and MEDIUM breaches notify supervisors and the assignee;
+# LOW breaches are only flagged as overdue.
+# Fractions work, e.g. 0.05 (3 minutes) for a live demo.
+# ---------------------------------------------------------
+
+SLA_HOURS = {
+    "HIGH": float(os.getenv("SLA_HOURS_HIGH", "2")),
+    "MEDIUM": float(os.getenv("SLA_HOURS_MEDIUM", "8")),
+    "LOW": float(os.getenv("SLA_HOURS_LOW", "24")),
+}
+
+SLA_CHECK_INTERVAL_SECONDS = int(os.getenv("SLA_CHECK_INTERVAL_SECONDS", "60"))
+
+
+# ---------------------------------------------------------
 # DEPLOYMENT
 # ---------------------------------------------------------
 

@@ -229,6 +229,13 @@ function App() {
         return <MaintenanceTickets />;
     }
 
+    if (
+        path === "/maintenance/notifications" &&
+        role === "MAINTENANCE_STAFF"
+    ) {
+        return <SupervisorNotifciations />;
+    }
+
 
     // =========================
     // ROOT REDIRECT

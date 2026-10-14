@@ -56,6 +56,13 @@ from config.settings import (
     POST_REPAIR_VERIFICATION_HOURS,
 )
 
+from services.routing_service import (
+    on_priority_changed,
+    on_ticket_reopened,
+    record_response,
+    route_new_ticket,
+)
+
 
 ALLOWED_PRIORITIES = {
     "HIGH",
@@ -308,6 +315,8 @@ def escalate_if_recurring(ticket, fault):
         priority=new_priority
     )
 
+    on_priority_changed(updated_ticket)
+
     notify_supervisors(
         "TICKET_ESCALATED",
         (
@@ -419,6 +428,11 @@ def reopen_existing_ticket_for_recurrence(
             fault=fault
         )
 
+        on_ticket_reopened(
+            ticket=updated_ticket,
+            summary=describe_fault(fault)
+        )
+
         increment_ticket_recurrence(ticket_id)
 
         updated_ticket = escalate_if_recurring(
@@ -482,6 +496,12 @@ def create_fault_ticket(
         create_ticket_notifications(
             ticket=ticket,
             fault=fault
+        )
+
+        route_new_ticket(
+            ticket=ticket,
+            fault=fault,
+            summary=describe_fault(fault)
         )
 
     return ticket
@@ -554,6 +574,16 @@ def change_ticket_status(
             status=new_status
         )
 
+        if new_status == "RESOLVED":
+            # Resolving is a response even if work was never "started".
+            record_response(ticket_id)
+
+        elif new_status == "REOPENED" and fault is not None:
+            on_ticket_reopened(
+                ticket=updated_ticket,
+                summary=describe_fault(fault)
+            )
+
     if new_status == "RESOLVED" and fault is not None:
         # Readings taken before the repair must not count
         # towards a post-repair recurrence.
@@ -619,10 +649,15 @@ def change_ticket_priority(
 
     validate_priority(priority)
 
-    return update_ticket_priority(
-        ticket_id=ticket_id,
-        priority=priority
-    )
+    with transaction():
+        updated_ticket = update_ticket_priority(
+            ticket_id=ticket_id,
+            priority=priority
+        )
+
+        on_priority_changed(updated_ticket)
+
+    return updated_ticket
 
 
 def update_ticket_notes(

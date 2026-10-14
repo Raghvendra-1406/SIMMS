@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import AppShell from "../../components/AppShell";
+import { AssigneeLabel, SlaBadge } from "../../components/TicketRouting";
+import { apiFetch } from "../../lib/api";
 import Icon from "../../components/Icon";
 import {
     Alert,
@@ -73,7 +75,7 @@ function MaintenanceTickets() {
             };
 
             const response = await fetch(
-                `${API_BASE_URL}/tickets/open`,
+                `${API_BASE_URL}/tickets/open?mine=true`,
                 {
                     headers,
                 }
@@ -243,6 +245,30 @@ function MaintenanceTickets() {
         (ticket) => ticket.status === "RESOLVED"
     ).length;
 
+    const overdueCount = tickets.filter(
+        (ticket) => ticket.sla_state === "OVERDUE"
+    ).length;
+
+    const [startingId, setStartingId] = useState(null);
+
+    // "Start work" is the response the SLA measures (Plan v2 §9.2).
+    const startWork = async (ticketId) => {
+        setStartingId(ticketId);
+
+        try {
+            await apiFetch(`/tickets/${ticketId}/start`, { method: "POST" });
+            await fetchTickets({ silent: true });
+        } catch (err) {
+            setError(err.message);
+        } finally {
+            setStartingId(null);
+        }
+    };
+
+    const canStart = (ticket) =>
+        (ticket.status === "OPEN" || ticket.status === "REOPENED") &&
+        !ticket.started_at;
+
     const highPriorityCount = tickets.filter(
         (ticket) => ticket.priority === "HIGH"
     ).length;
@@ -363,12 +389,12 @@ function MaintenanceTickets() {
                 />
                 <StatCard
                     unavailable={loadFailed}
-                    label="Resolved tickets"
-                    value={resolvedCount}
+                    label="Overdue"
+                    value={overdueCount}
                     loading={loading}
-                    hint="Ready to be closed"
-                    icon="checkCircle"
-                    tone="success"
+                    hint={overdueCount > 0 ? "Response time missed: start these now" : "All within response time"}
+                    icon="clock"
+                    tone={overdueCount > 0 ? "danger" : "success"}
                 />
                 <StatCard
                     unavailable={loadFailed}
@@ -444,7 +470,7 @@ function MaintenanceTickets() {
                                         <th scope="col">Fault</th>
                                         <th scope="col">Priority</th>
                                         <th scope="col">Status</th>
-                                        <th scope="col">Created</th>
+                                        <th scope="col">Response</th>
                                         <th scope="col" className="text-right">
                                             Action
                                         </th>
@@ -505,11 +531,29 @@ function MaintenanceTickets() {
                                                     <StatusBadge status={ticket.status || "OPEN"} />
                                                 </td>
 
-                                                <td className="num whitespace-nowrap text-xs text-slate-500">
-                                                    {formatDate(ticket.created_at)}
+                                                <td>
+                                                    <SlaBadge ticket={ticket} />
+                                                    <p className="mt-1 text-[11px]">
+                                                        <AssigneeLabel ticket={ticket} />
+                                                    </p>
+                                                    <p className="num mt-0.5 text-[11px] text-slate-500">
+                                                        Raised {formatDate(ticket.created_at)}
+                                                    </p>
                                                 </td>
 
                                                 <td className="text-right">
+                                                    <div className="flex justify-end gap-2">
+                                                    {canStart(ticket) && (
+                                                        <button
+                                                            type="button"
+                                                            disabled={startingId === ticket.ticket_id}
+                                                            onClick={() => startWork(ticket.ticket_id)}
+                                                            className="btn btn-sm btn-success"
+                                                        >
+                                                            <Icon name="play" className="h-3.5 w-3.5" />
+                                                            Start work
+                                                        </button>
+                                                    )}
                                                     <button
                                                         type="button"
                                                         onClick={() =>
@@ -522,6 +566,7 @@ function MaintenanceTickets() {
                                                         Manage
                                                         <Icon name="arrowRight" className="h-3.5 w-3.5" />
                                                     </button>
+                                                    </div>
                                                 </td>
                                             </tr>
                                         );
@@ -580,6 +625,7 @@ function MaintenanceTickets() {
 
                                                 <div className="mt-2.5 flex flex-wrap items-center gap-2">
                                                     <PriorityBadge priority={ticket.priority} size="sm" />
+                                                    <SlaBadge ticket={ticket} />
                                                     <span className="num flex items-center gap-1 text-[11px] text-slate-500">
                                                         <Icon name="clock" className="h-3 w-3" />
                                                         {formatDate(ticket.created_at)}

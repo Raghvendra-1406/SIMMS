@@ -50,6 +50,10 @@ from config.settings import (
     COOLDOWN_MINUTES,
 )
 
+from services.routing_service import (
+    has_started,
+)
+
 from database.repositories.fault_repository import (
     lock_fault_identity,
     update_fault_recurrence_type,
@@ -229,7 +233,9 @@ def handle_recovered_fault(
             None
         )
 
-        if open_ticket is None:
+        # Someone already started work: not "untouched" any more,
+        # leave it to resolve + verification.
+        if open_ticket is None or has_started(open_ticket[0]):
             return None
 
         return {

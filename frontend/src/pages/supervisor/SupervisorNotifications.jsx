@@ -272,9 +272,12 @@ export default function SupervisorNotifications() {
         }
 
         if (notification.ticket_id) {
-            navigateTo(
-                `/supervisor/tickets/${notification.ticket_id}`
-            );
+            const base =
+                localStorage.getItem("role") === "MAINTENANCE_STAFF"
+                    ? "/maintenance/tickets"
+                    : "/supervisor/tickets";
+
+            navigateTo(`${base}/${notification.ticket_id}`);
         }
     };
 

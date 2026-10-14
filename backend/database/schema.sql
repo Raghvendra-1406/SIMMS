@@ -17,7 +17,9 @@ CREATE TABLE users (
     password_hash TEXT NOT NULL,
     role VARCHAR(30) NOT NULL,
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-    is_active BOOLEAN DEFAULT TRUE
+    is_active BOOLEAN DEFAULT TRUE,
+    -- Maintenance staff team: ELECTRICAL / HOUSEKEEPING / GENERAL
+    team VARCHAR(30)
 );
 
 CREATE TABLE rooms (
@@ -66,7 +68,15 @@ CREATE TABLE tickets (
     resolved_at TIMESTAMPTZ,
     closed_at TIMESTAMPTZ,
     maintenance_notes TEXT,
-    recurrence_count INTEGER NOT NULL DEFAULT 0
+    recurrence_count INTEGER NOT NULL DEFAULT 0,
+    -- Routing and SLA (Plan v2 §9)
+    category VARCHAR(30),
+    assigned_to INTEGER REFERENCES users(user_id) ON DELETE SET NULL,
+    assigned_at TIMESTAMPTZ,
+    sla_started_at TIMESTAMPTZ,
+    sla_due_at TIMESTAMPTZ,
+    started_at TIMESTAMPTZ,
+    escalated_at TIMESTAMPTZ
 );
 
 CREATE TABLE ticket_history (
@@ -224,6 +234,16 @@ CREATE INDEX idx_tickets_fault
 
 CREATE INDEX idx_tickets_created
     ON tickets (created_at);
+
+CREATE INDEX idx_tickets_assigned_active
+    ON tickets (assigned_to)
+    WHERE status IN ('OPEN', 'REOPENED', 'RESOLVED');
+
+CREATE INDEX idx_tickets_sla_pending
+    ON tickets (sla_due_at)
+    WHERE status IN ('OPEN', 'REOPENED')
+      AND started_at IS NULL
+      AND escalated_at IS NULL;
 
 CREATE INDEX idx_ticket_history_ticket
     ON ticket_history (ticket_id);

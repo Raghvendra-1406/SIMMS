@@ -96,7 +96,7 @@ function MaintenanceDashboard() {
         classroomsResponse,
         faultsResponse,
       ] = await Promise.all([
-        fetch(`${API_BASE_URL}/tickets/open`, {
+        fetch(`${API_BASE_URL}/tickets/open?mine=true`, {
           headers,
         }),
         fetch(`${API_BASE_URL}/classrooms`, {

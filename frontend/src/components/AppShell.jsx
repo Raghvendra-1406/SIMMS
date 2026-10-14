@@ -74,6 +74,12 @@ const NAVIGATION = {
         items: [
           { label: "Dashboard", icon: "dashboard", path: "/maintenance/dashboard" },
           { label: "My tickets", icon: "wrench", path: "/maintenance/tickets" },
+          {
+            label: "Notifications",
+            icon: "bell",
+            path: "/maintenance/notifications",
+            badgeKey: "unread",
+          },
         ],
       },
     ],
@@ -366,9 +372,9 @@ export default function AppShell({ title, eyebrow, backHref, actions, unreadCoun
     }
   }, [collapsed]);
 
-  // Supervisor sidebar shows the unread notification count.
+  // Supervisor and maintenance sidebars show the unread notification count.
   useEffect(() => {
-    if (role !== "SUPERVISOR" || unreadCount !== undefined) return;
+    if ((role !== "SUPERVISOR" && role !== "MAINTENANCE_STAFF") || unreadCount !== undefined) return;
 
     let cancelled = false;
     const token = localStorage.getItem("access_token");

@@ -12,6 +12,9 @@ import {
 } from "../../components/ui";
 import { navigateTo } from "../../lib/session";
 import { formatConfidence } from "../../lib/format";
+import { AssigneeLabel, SlaBadge } from "../../components/TicketRouting";
+import { canStartWork, formatRelative } from "../../lib/ticketRouting";
+import { apiFetch } from "../../lib/api";
 
 // Backend URL: VITE_API_BASE_URL at build time (see lib/api.js).
 import { API_BASE_URL } from "../../lib/api";
@@ -237,6 +240,24 @@ export default function MaintenanceTicketDetails() {
     }
   }
 
+  // "Start work" is the response the SLA measures (Plan v2 §9.2).
+  async function startWork() {
+    try {
+      setActionLoading(true);
+      setActionError("");
+      setSuccessMessage("");
+
+      const data = await apiFetch(`/tickets/${ticket.ticket_id}/start`, { method: "POST" });
+
+      setTicket(data);
+      setSuccessMessage("Work started. The supervisor can see you are on it.");
+    } catch (err) {
+      setActionError(err.message || "Failed to start work.");
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
   function runAction(key, action) {
     setPendingAction(key);
     action();
@@ -310,11 +331,19 @@ export default function MaintenanceTicketDetails() {
   }
 
   const isClosed = ticket.status === "CLOSED";
-  const canResolve =
-    ticket.status === "OPEN" ||
-    ticket.status === "REOPENED";
 
-  const canClose = ticket.status === "RESOLVED";
+  const myUserId = Number(localStorage.getItem("user_id"));
+  const assignedToOther = Boolean(ticket.assigned_to) && ticket.assigned_to !== myUserId;
+
+  const canResolve =
+    !assignedToOther &&
+    (ticket.status === "OPEN" ||
+      ticket.status === "REOPENED");
+
+  const canStart = !assignedToOther && canStartWork(ticket);
+
+  // Closing is the supervisor's job after verification (Plan v2 §9.3).
+  const canClose = false;
 
   const locationParts = [
     classroom?.building,
@@ -343,6 +372,7 @@ export default function MaintenanceTicketDetails() {
                 label={`${formatPriority(ticket.priority)} priority`}
               />
             )}
+            <SlaBadge ticket={ticket} size="md" />
           </div>
 
           <h2 className="mt-3 text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
@@ -386,6 +416,12 @@ export default function MaintenanceTicketDetails() {
             </Alert>
           )}
 
+          {assignedToOther && !isClosed && (
+            <Alert tone="info" title="Assigned to someone else" className="mb-4">
+              This ticket is assigned to {ticket.assigned_to_name}. Ask a supervisor to reassign it if you are taking it over.
+            </Alert>
+          )}
+
           {isClosed ? (
             <div className="flex items-center gap-3 rounded-lg border border-slate-200 bg-surface px-4 py-3.5">
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
@@ -400,6 +436,22 @@ export default function MaintenanceTicketDetails() {
             </div>
           ) : canResolve || canClose ? (
             <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+              {canStart && (
+                <button
+                  type="button"
+                  onClick={() => runAction("START", startWork)}
+                  disabled={actionLoading}
+                  className="btn btn-lg btn-primary h-12 w-full text-[15px] sm:w-auto sm:min-w-[200px]"
+                >
+                  {actionLoading && pendingAction === "START" ? (
+                    <Spinner className="h-5 w-5" />
+                  ) : (
+                    <Icon name="play" className="h-5 w-5" />
+                  )}
+                  {busyLabel("START", "Start work")}
+                </button>
+              )}
+
               {canResolve && (
                 <button
                   type="button"
@@ -599,6 +651,17 @@ export default function MaintenanceTicketDetails() {
               </DetailItem>
               <DetailItem label="Created" mono>
                 {formatDateTime(ticket.created_at)}
+              </DetailItem>
+              <DetailItem label="Assigned to">
+                <AssigneeLabel ticket={ticket} />
+              </DetailItem>
+              <DetailItem label="Respond by" mono>
+                {ticket.sla_due_at
+                  ? `${formatDateTime(ticket.sla_due_at)} (${formatRelative(ticket.sla_due_at)})`
+                  : "—"}
+              </DetailItem>
+              <DetailItem label="Work started" mono>
+                {formatDateTime(ticket.started_at)}
               </DetailItem>
               <DetailItem label="Resolved" mono>
                 {formatDateTime(ticket.resolved_at)}

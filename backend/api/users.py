@@ -21,6 +21,15 @@ from services.auth_service import (
     validate_role,
 )
 
+from services.routing_service import (
+    validate_team,
+)
+
+from database.repositories.ticket_routing_repository import (
+    get_user_teams,
+    set_user_team,
+)
+
 
 router = APIRouter(
     prefix="/users",
@@ -28,7 +37,10 @@ router = APIRouter(
 )
 
 
-def user_row_to_response(user):
+def user_row_to_response(user, teams=None):
+    if teams is None:
+        teams = get_user_teams([user[0]])
+
     return {
         "user_id": user[0],
         "name": user[1],
@@ -36,7 +48,21 @@ def user_row_to_response(user):
         "role": user[4],
         "created_at": user[5],
         "is_active": user[6],
+        "team": teams.get(user[0]),
     }
+
+
+def staff_team(role, team):
+    """
+    Only maintenance staff belong to a team.
+    """
+
+    if role != "MAINTENANCE_STAFF":
+        return None
+
+    validate_team(team)
+
+    return team
 
 
 @router.get(
@@ -47,9 +73,10 @@ def get_users(
     current_user=Depends(require_admin)
 ):
     users = get_all_users()
+    teams = get_user_teams()
 
     return [
-        user_row_to_response(user)
+        user_row_to_response(user, teams)
         for user in users
     ]
 
@@ -83,6 +110,8 @@ def create_user_endpoint(
     current_user=Depends(require_admin)
 ):
     try:
+        team = staff_team(user.role, user.team)
+
         created_user = register_user(
             name=user.name,
             email=user.email,
@@ -90,6 +119,8 @@ def create_user_endpoint(
             role=user.role,
             is_active=user.is_active
         )
+
+        set_user_team(created_user[0], team)
 
         return user_row_to_response(created_user)
 
@@ -120,6 +151,8 @@ def update_user_endpoint(
     try:
         validate_role(user.role)
 
+        team = staff_team(user.role, user.team)
+
         updated_user = update_user(
             user_id=user_id,
             name=user.name,
@@ -127,6 +160,8 @@ def update_user_endpoint(
             role=user.role,
             is_active=user.is_active
         )
+
+        set_user_team(user_id, team)
 
         return user_row_to_response(updated_user)
 
