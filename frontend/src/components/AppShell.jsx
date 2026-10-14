@@ -20,6 +20,7 @@ const NAVIGATION = {
         items: [
           { label: "Dashboard", icon: "dashboard", path: "/admin/dashboard" },
           { label: "Live monitor", icon: "activity", path: "/admin/monitoring" },
+          { label: "Statistics", icon: "barChart", path: "/admin/statistics" },
         ],
       },
       {
@@ -46,6 +47,7 @@ const NAVIGATION = {
           { label: "Dashboard", icon: "dashboard", path: "/supervisor/dashboard" },
           { label: "Classrooms", icon: "classroom", path: "/supervisor/classrooms" },
           { label: "Live monitor", icon: "activity", path: "/supervisor/monitoring" },
+          { label: "Statistics", icon: "barChart", path: "/supervisor/statistics" },
         ],
       },
       {

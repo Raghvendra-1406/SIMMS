@@ -18,6 +18,7 @@ from database.connection import get_connection, transaction
 
 # Children before parents (foreign keys).
 TABLES = [
+    "ticket_reviews",
     "ticket_evidence",
     "ticket_history",
     "notifications",

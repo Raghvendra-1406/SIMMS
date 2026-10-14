@@ -165,6 +165,17 @@ CREATE TABLE node_status (
 
 
 -- Calibration reference images (kept in the database: ephemeral disks).
+-- Human verdict per ticket, for the false ticket rate (Plan v2 §16.2).
+CREATE TABLE ticket_reviews (
+    ticket_id INTEGER PRIMARY KEY
+        REFERENCES tickets(ticket_id) ON DELETE CASCADE,
+    verdict VARCHAR(20) NOT NULL
+        CHECK (verdict IN ('GENUINE', 'FALSE_ALARM')),
+    note TEXT,
+    reviewed_by INTEGER REFERENCES users(user_id),
+    reviewed_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE calibration_images (
     image_id UUID PRIMARY KEY,
     content_type VARCHAR(40) NOT NULL,
@@ -210,6 +221,9 @@ CREATE INDEX idx_fault_events_room_status
 
 CREATE INDEX idx_tickets_fault
     ON tickets (fault_id);
+
+CREATE INDEX idx_tickets_created
+    ON tickets (created_at);
 
 CREATE INDEX idx_ticket_history_ticket
     ON ticket_history (ticket_id);

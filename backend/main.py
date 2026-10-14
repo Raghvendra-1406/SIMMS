@@ -25,6 +25,7 @@ from api.calibration_image import (
 )
 from api.notifications import router as notification_router
 from api.live import router as live_router
+from api.stats import router as stats_router
 from services.scheduler import start_scheduler
 from config.settings import CORS_ORIGINS, CORS_ORIGIN_REGEX
 
@@ -79,6 +80,7 @@ app.include_router(
 )
 app.include_router(notification_router)
 app.include_router(live_router)
+app.include_router(stats_router)
 
 @app.get("/")
 def root():

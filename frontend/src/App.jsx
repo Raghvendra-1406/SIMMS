@@ -11,6 +11,7 @@ import SupervisorDashboard from "./pages/supervisor/SupervisorDashboard";
 import SupervisorClassrooms from "./pages/supervisor/SupervisorClassrooms";
 import SupervisorClassroomDetails from "./pages/supervisor/SupervisorClassroomDetails";
 import SupervisorMonitoring from "./pages/supervisor/SupervisorMonitoring";
+import SupervisorStatistics from "./pages/supervisor/SupervisorStatistics";
 import SupervisorTickets from "./pages/supervisor/SupervisorTickets";
 import SupervisorTicketDetails from "./pages/supervisor/SupervisorTicketDetails";
 import SupervisorFaults from "./pages/supervisor/SupervisorFaults";
@@ -123,6 +124,13 @@ function App() {
     }
 
     if (
+        path === "/admin/statistics" &&
+        role === "ADMIN"
+    ) {
+        return <SupervisorStatistics />;
+    }
+
+    if (
         path === "/admin/calibration" &&
         role === "ADMIN"
     ) {
@@ -153,6 +161,13 @@ function App() {
         role === "SUPERVISOR"
     ) {
         return <SupervisorMonitoring />;
+    }
+
+    if (
+        path === "/supervisor/statistics" &&
+        role === "SUPERVISOR"
+    ) {
+        return <SupervisorStatistics />;
     }
 
     if (

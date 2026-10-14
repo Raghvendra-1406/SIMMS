@@ -71,7 +71,8 @@ def create_confirmed_fault(
     confidence=None,
     abnormal_count=None,
     recurrence_type=None,
-    details=None
+    details=None,
+    detected_at=None
 ):
     existing_fault = get_active_fault(
         room_id=room_id,
@@ -82,7 +83,9 @@ def create_confirmed_fault(
     if existing_fault is not None:
         return existing_fault
 
-    detected_at = datetime.now(timezone.utc)
+    # detected_at = onset of the abnormal run (first abnormal vote);
+    # confirmed_at = now. The gap is the confirmation delay.
+    detected_at = detected_at or datetime.now(timezone.utc)
 
     with transaction():
         fault = create_fault_event(

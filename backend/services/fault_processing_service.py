@@ -86,7 +86,8 @@ def handle_confirmed_fault(
     room_id,
     device_id,
     abnormal_count,
-    details=None
+    details=None,
+    detected_at=None
 ):
     """
     Turn a temporally confirmed fault into a fault event and ticket.
@@ -176,7 +177,8 @@ def handle_confirmed_fault(
             confidence=100.0,
             abnormal_count=abnormal_count,
             recurrence_type=recurrence["classification"],
-            details=details
+            details=details,
+            detected_at=detected_at
         )
 
         return {
@@ -274,7 +276,8 @@ def apply_observation(
             room_id=room_id,
             device_id=device_id,
             abnormal_count=temporal_result["abnormal_count"],
-            details=details
+            details=details,
+            detected_at=temporal_result["onset_at"]
         )
 
     elif temporal_result["newly_recovered"]:
