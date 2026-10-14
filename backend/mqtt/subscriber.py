@@ -3,8 +3,6 @@ import queue
 import threading
 import time
 import uuid
-from datetime import datetime, timezone
-
 import paho.mqtt.client as mqtt
 
 from config.settings import (
@@ -32,10 +30,9 @@ from services.vision_service import (
 )
 
 from services.fault_processing_service import (
-    process_fan_observation,
-    process_light_observation,
     process_electrical_observation,
     process_board_observation,
+    process_unit_observations,
 )
 
 from database.repositories.room_repository import (
@@ -45,7 +42,11 @@ from database.repositories.room_repository import (
 from database.repositories.device_repository import (
     get_device_by_id,
     get_device_by_room_and_name,
-    update_device_last_seen,
+    update_devices_last_seen,
+)
+
+from database.repositories.vision_repository import (
+    create_vision_observations_bulk,
 )
 
 from database.repositories.node_status_repository import (
@@ -64,6 +65,17 @@ METADATA_KEYS = {
 }
 
 NODE_STATES = {"ONLINE", "OFFLINE"}
+
+# Camera batches: one message carries every fan / tube light of the
+# room, e.g. {"fans": [{"device_name": "Fan 1", "running": true,
+# "motion_score": 0.3, "confidence": 0.95}, ...]}.
+# batch key -> (unit kind, observation type, data key, fields)
+UNIT_BATCHES = {
+    "fans": ("FAN", "FAN_MOTION", "fan_motion",
+             ("running", "motion_score", "confidence")),
+    "lights": ("LIGHT", "LIGHT", "light",
+               ("lit", "brightness", "confidence")),
+}
 
 # last_seen / node heartbeat writes are throttled per device/node:
 # one write per interval is enough and saves database round trips.
@@ -142,16 +154,18 @@ def resolve_device_id(room_id, payload):
     return None
 
 
-def mark_seen(room_id, device_id, node_id):
+def mark_seen(room_id, device_id, node_id, device_ids=()):
     """
-    Record that a device and/or node was just heard from.
+    Record that devices and/or a node were just heard from.
     """
 
-    if device_id is not None and _should_write(("device", device_id)):
-        update_device_last_seen(
-            device_id,
-            datetime.now(timezone.utc)
-        )
+    due = [
+        seen_id
+        for seen_id in [device_id, *device_ids]
+        if seen_id is not None and _should_write(("device", seen_id))
+    ]
+
+    update_devices_last_seen(due)
 
     if node_id and _should_write(("node", room_id, node_id)):
         upsert_node_status(
@@ -181,7 +195,7 @@ def determine_sensor_observation_type(data):
             "current",
             "power",
             "power_factor",
-            "fan_current",
+            "circuits",
         }
     ):
         return "ELECTRICAL"
@@ -236,18 +250,15 @@ def process_sensor_message(room, payload):
 
     mark_seen(room_id, device_id, payload.get("node_id"))
 
-    # A new LIGHT / ELECTRICAL observation is one observation
-    # cycle for its temporal processor (4-of-5 rule).
+    # A new ELECTRICAL observation (all circuits of the room) is one
+    # observation cycle for the electrical-abnormality and
+    # energy-wastage temporal processors (4-of-5 rule).
 
-    if observation_type == "LIGHT":
-        report(room, observation_type, process_light_observation(
-            room_id=room_id
-        ))
+    if observation_type == "ELECTRICAL":
+        results = process_electrical_observation(room_id=room_id)
 
-    elif observation_type == "ELECTRICAL":
-        report(room, observation_type, process_electrical_observation(
-            room_id=room_id
-        ))
+        report(room, "ELECTRICAL", results["electrical"])
+        report(room, "ENERGY", results["energy"])
 
     else:
         report(room, observation_type, None)
@@ -267,11 +278,75 @@ def determine_vision_observation_type(data):
     if "board" in data:
         return "BOARD"
 
+    if "light" in data:
+        return "LIGHT"
+
     return None
+
+
+def process_unit_batch(room, payload, batch_key):
+    """
+    Store one camera reading per fan / tube light, in one insert,
+    then evaluate all of them against the circuit current.
+    """
+
+    room_id = room[0]
+
+    kind, observation_type, data_key, fields = UNIT_BATCHES[batch_key]
+
+    entries = payload.get(batch_key)
+
+    if not isinstance(entries, list):
+        log(f"Ignoring '{batch_key}' batch for {room[1]}: not a list.")
+        return
+
+    rows = []
+    device_ids = []
+
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+
+        device_id = resolve_device_id(room_id, entry)
+
+        if device_id is None:
+            continue
+
+        data = {
+            data_key: {
+                field: entry[field]
+                for field in fields
+                if field in entry
+            },
+        }
+
+        if payload.get("calibration_version") is not None:
+            data["calibration_version"] = payload["calibration_version"]
+
+        rows.append((
+            room_id,
+            device_id,
+            payload.get("timestamp"),
+            observation_type,
+            data,
+        ))
+
+        device_ids.append(device_id)
+
+    create_vision_observations_bulk(rows)
+
+    mark_seen(room_id, None, payload.get("node_id"), device_ids)
+
+    report_units(room, kind, process_unit_observations(room_id, kind))
 
 
 def process_vision_message(room, payload):
     room_id = room[0]
+
+    for batch_key in UNIT_BATCHES:
+        if batch_key in payload:
+            process_unit_batch(room, payload, batch_key)
+            return
 
     observation_data = get_observation_data(payload)
 
@@ -292,10 +367,10 @@ def process_vision_message(room, payload):
 
     device_id = resolve_device_id(room_id, payload)
 
-    if observation_type == "FAN_MOTION" and device_id is None:
+    if observation_type in {"FAN_MOTION", "LIGHT"} and device_id is None:
         log(
-            f"Fan motion ignored for room {room[1]}: "
-            f"the message must name a fan device of this room."
+            f"{observation_type} ignored for room {room[1]}: the "
+            f"message must name a fan / tube light of this room."
         )
         return
 
@@ -318,10 +393,10 @@ def process_vision_message(room, payload):
         ))
 
     elif observation_type == "FAN_MOTION":
-        report(room, observation_type, process_fan_observation(
-            room_id=room_id,
-            device_id=device_id
-        ))
+        report_units(room, "FAN", process_unit_observations(room_id, "FAN"))
+
+    elif observation_type == "LIGHT":
+        report_units(room, "LIGHT", process_unit_observations(room_id, "LIGHT"))
 
     else:
         report(room, observation_type, None)
@@ -397,6 +472,21 @@ def report(room, observation_type, result):
 
         if ticket:
             summary += f" ticket #{ticket[0]}"
+
+    log(summary)
+
+
+def report_units(room, kind, result):
+    summary = f"{room[1]} {kind}S: {result['summary']}"
+
+    actions = [
+        f"{unit_result['action']} ticket #{unit_result['ticket'][0]}"
+        for unit_result in result["units"].values()
+        if unit_result.get("action") and unit_result.get("ticket")
+    ]
+
+    if actions:
+        summary += " -> " + ", ".join(actions)
 
     log(summary)
 

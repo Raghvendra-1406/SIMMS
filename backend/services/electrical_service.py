@@ -1,25 +1,26 @@
-from database.repositories.sensor_repository import (
-    get_latest_sensor_observation,
+from config.settings import (
+    MAIN_CURRENT_MAX_A,
+    POWER_FACTOR_MIN,
+    POWER_FACTOR_MIN_CURRENT_A,
+    VOLTAGE_MAX_V,
+    VOLTAGE_MIN_V,
 )
 
 from database.repositories.room_repository import (
     get_room_by_id,
 )
 
+from services.circuit_service import (
+    FANS,
+    LIGHTS,
+    MAIN,
+    evaluate_circuit,
+    get_circuit_reading,
+    get_latest_electrical,
+)
+
 
 ELECTRICAL_ABNORMALITY_THRESHOLD = 4
-
-VOLTAGE_MIN = 200.0
-VOLTAGE_MAX = 250.0
-
-CURRENT_MIN = 0.0
-CURRENT_MAX = 20.0
-
-POWER_MIN = 0.0
-POWER_MAX = 5000.0
-
-POWER_FACTOR_MIN = 0.5
-POWER_FACTOR_MAX = 1.0
 
 
 def validate_room_exists(room_id):
@@ -31,60 +32,35 @@ def validate_room_exists(room_id):
     return room
 
 
-def get_latest_electrical_observation(room_id):
-    return get_latest_sensor_observation(
-        room_id=room_id,
-        observation_type="ELECTRICAL"
+def _low_power_factor(reading):
+    if not reading:
+        return False
+
+    power_factor = reading.get("power_factor")
+    current = reading.get("current") or 0
+
+    return (
+        power_factor is not None
+        and current >= POWER_FACTOR_MIN_CURRENT_A
+        and power_factor < POWER_FACTOR_MIN
     )
 
 
-def extract_electrical_data(observation):
-    if observation is None:
-        return None
+def evaluate_electrical_status(room_id, electrical_data=None):
+    """
+    Electrical abnormality on the room's supply:
 
-    observation_data = observation[5]
+    - supply voltage outside VOLTAGE_MIN_V .. VOLTAGE_MAX_V
+    - main supply current above MAIN_CURRENT_MAX_A
+    - a LIGHTS / FANS circuit drawing more than all its units could
+      (short circuit, stalled motors, wrong load on the circuit)
+    - low power factor on a loaded circuit
+    """
 
-    return observation_data
-
-
-def check_voltage(voltage):
-    if voltage is None:
-        return True
-
-    return VOLTAGE_MIN <= voltage <= VOLTAGE_MAX
-
-
-def check_current(current):
-    if current is None:
-        return True
-
-    return CURRENT_MIN <= current <= CURRENT_MAX
-
-
-def check_power(power):
-    if power is None:
-        return True
-
-    return POWER_MIN <= power <= POWER_MAX
-
-
-def check_power_factor(power_factor):
-    if power_factor is None:
-        return True
-
-    return POWER_FACTOR_MIN <= power_factor <= POWER_FACTOR_MAX
-
-
-def evaluate_electrical_status(room_id):
     validate_room_exists(room_id)
 
-    observation = get_latest_electrical_observation(
-        room_id
-    )
-
-    electrical_data = extract_electrical_data(
-        observation
-    )
+    if electrical_data is None:
+        electrical_data = get_latest_electrical(room_id)
 
     if electrical_data is None:
         return {
@@ -93,46 +69,41 @@ def evaluate_electrical_status(room_id):
             "data": None,
         }
 
+    abnormal = []
+
     voltage = electrical_data.get("voltage")
-    current = electrical_data.get("current")
-    power = electrical_data.get("power")
-    power_factor = electrical_data.get("power_factor")
 
-    abnormal_fields = []
+    if voltage is not None and not (
+        VOLTAGE_MIN_V <= float(voltage) <= VOLTAGE_MAX_V
+    ):
+        abnormal.append(f"supply voltage {float(voltage):.0f} V")
 
-    if not check_voltage(voltage):
-        abnormal_fields.append("voltage")
+    main = get_circuit_reading(electrical_data, MAIN)
 
-    if not check_current(current):
-        abnormal_fields.append("current")
+    if main and (main.get("current") or 0) > MAIN_CURRENT_MAX_A:
+        abnormal.append(f"main supply overcurrent {main['current']:.1f} A")
 
-    if not check_power(power):
-        abnormal_fields.append("power")
+    if _low_power_factor(main):
+        abnormal.append(f"main supply power factor {main['power_factor']}")
 
-    if not check_power_factor(power_factor):
-        abnormal_fields.append("power_factor")
+    for circuit in (LIGHTS, FANS):
+        summary = evaluate_circuit(room_id, circuit, electrical_data)
 
-    if abnormal_fields:
-        return {
-            "status": "ABNORMALITY_CANDIDATE",
-            "abnormal_fields": abnormal_fields,
-            "data": electrical_data,
-        }
+        if summary["overloaded"]:
+            abnormal.append(
+                f"{circuit.lower()} circuit overcurrent "
+                f"{summary['current']:.1f} A "
+                f"(max {summary['expected_max_current_a']:.1f} A)"
+            )
+
+        if _low_power_factor(get_circuit_reading(electrical_data, circuit)):
+            abnormal.append(
+                f"{circuit.lower()} circuit power factor "
+                f"{summary['power_factor']}"
+            )
 
     return {
-        "status": "NORMAL",
-        "abnormal_fields": [],
+        "status": "ABNORMALITY_CANDIDATE" if abnormal else "NORMAL",
+        "abnormal_fields": abnormal,
         "data": electrical_data,
     }
-
-
-def is_electrical_abnormality_candidate(room_id):
-    result = evaluate_electrical_status(
-        room_id
-    )
-
-    return result["status"] == "ABNORMALITY_CANDIDATE"
-
-
-def confirm_electrical_abnormality(abnormal_count):
-    return abnormal_count >= ELECTRICAL_ABNORMALITY_THRESHOLD

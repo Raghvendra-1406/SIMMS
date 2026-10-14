@@ -1,5 +1,5 @@
 from database.connection import get_connection
-from psycopg2.extras import Json
+from psycopg2.extras import Json, execute_values
 
 def create_vision_observation(
     room_id,
@@ -339,6 +339,97 @@ def get_room_vacancy(
                 else None
             )
         )
+
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def create_vision_observations_bulk(rows):
+    """
+    Insert several observations in one round trip.
+
+    rows: [(room_id, device_id, observed_at, observation_type,
+            observation_data)]
+    observed_at may be None (= now).
+    """
+
+    if not rows:
+        return 0
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    try:
+        execute_values(
+            cursor,
+            """
+            INSERT INTO vision_observations (
+                room_id,
+                device_id,
+                observed_at,
+                observation_type,
+                observation_data
+            )
+            VALUES %s
+            """,
+            [
+                (
+                    room_id,
+                    device_id,
+                    observed_at,
+                    observation_type,
+                    Json(observation_data),
+                )
+                for room_id, device_id, observed_at, observation_type,
+                observation_data in rows
+            ],
+            template="(%s, %s, COALESCE(%s, CURRENT_TIMESTAMP), %s, %s)",
+        )
+
+        conn.commit()
+
+        return len(rows)
+
+    except Exception:
+        conn.rollback()
+        raise
+
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def get_latest_device_observations(
+    room_id,
+    observation_type,
+    max_age_minutes
+):
+    """
+    Latest observation of a type for every device in the room,
+    ignoring observations older than max_age_minutes.
+
+    Returns {device_id: observation_data}.
+    """
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute("""
+            SELECT DISTINCT ON (device_id)
+                device_id,
+                observation_data
+            FROM vision_observations
+            WHERE room_id = %s
+              AND observation_type = %s
+              AND device_id IS NOT NULL
+              AND observed_at >
+                  CURRENT_TIMESTAMP - %s * INTERVAL '1 minute'
+            ORDER BY device_id, observed_at DESC
+        """, (room_id, observation_type, max_age_minutes))
+
+        return {row[0]: row[1] for row in cursor.fetchall()}
 
     finally:
         cursor.close()

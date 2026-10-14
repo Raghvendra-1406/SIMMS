@@ -44,11 +44,16 @@ export default function AdminRooms() {
 
   const [form, setForm] = useState({
     room_name: "",
-    room_type: "",
+    room_type: "CLASSROOM",
     building: "",
     floor: "",
     capacity: "",
+    fan_count: "6",
+    light_count: "6",
+    add_node_devices: true,
   });
+
+  const [notice, setNotice] = useState("");
 
   const loadClassrooms = async () => {
     try {
@@ -134,10 +139,13 @@ export default function AdminRooms() {
 
     setForm({
       room_name: "",
-      room_type: "",
+      room_type: "CLASSROOM",
       building: "",
       floor: "",
       capacity: "",
+      fan_count: "6",
+      light_count: "6",
+      add_node_devices: true,
     });
 
     setActionError("");
@@ -149,7 +157,7 @@ export default function AdminRooms() {
 
     setForm({
       room_name: room.room_name || "",
-      room_type: room.room_type || "",
+      room_type: room.room_type || "CLASSROOM",
       building: room.building || "",
       floor:
         room.floor !== null &&
@@ -168,11 +176,11 @@ export default function AdminRooms() {
   };
 
   const handleFormChange = (event) => {
-    const { name, value } = event.target;
+    const { name, value, type, checked } = event.target;
 
     setForm((previous) => ({
       ...previous,
-      [name]: value,
+      [name]: type === "checkbox" ? checked : value,
     }));
   };
 
@@ -185,11 +193,19 @@ export default function AdminRooms() {
     try {
       const payload = {
         room_name: form.room_name.trim(),
-        room_type: form.room_type.trim(),
+        room_type: form.room_type,
         building: form.building.trim(),
         floor: Number(form.floor),
         capacity: Number(form.capacity),
       };
+
+      // New rooms get their fans, tube lights, ESP32 node and camera
+      // created together with them.
+      if (!editingRoom) {
+        payload.fan_count = Number(form.fan_count) || 0;
+        payload.light_count = Number(form.light_count) || 0;
+        payload.add_node_devices = form.add_node_devices;
+      }
 
       const url = editingRoom
         ? `${API_BASE_URL}/classrooms/${editingRoom.room_id}`
@@ -225,6 +241,14 @@ export default function AdminRooms() {
 
         throw new Error(detail);
       }
+
+      const saved = await response.json().catch(() => null);
+
+      setNotice(
+        !editingRoom && saved?.devices_created
+          ? `Classroom "${saved.room_name}" created with ${saved.devices_created} devices.`
+          : ""
+      );
 
       setShowModal(false);
       await loadClassrooms();
@@ -355,6 +379,12 @@ export default function AdminRooms() {
       <p className="mb-6 max-w-2xl text-sm text-slate-500">
         Manage registered classrooms and open an individual classroom to manage its connected devices.
       </p>
+
+      {notice && (
+        <Alert tone="success" onDismiss={() => setNotice("")} className="mb-6">
+          {notice}
+        </Alert>
+      )}
 
       {error && (
         <Alert tone="danger" title="Unable to load classrooms" onRetry={loadClassrooms} className="mb-6">
@@ -598,15 +628,17 @@ export default function AdminRooms() {
             <label htmlFor="room_type" className="label">
               Room type <span className="text-red-500">*</span>
             </label>
-            <input
+            <select
               id="room_type"
               name="room_type"
               value={form.room_type}
               onChange={handleFormChange}
               required
-              placeholder="e.g. Laboratory / Classroom"
-              className="input"
-            />
+              className="select"
+            >
+              <option value="CLASSROOM">Classroom</option>
+              <option value="LAB">Laboratory</option>
+            </select>
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
@@ -660,6 +692,57 @@ export default function AdminRooms() {
             />
             <p className="help-text">Maximum number of seated occupants.</p>
           </div>
+
+          {!editingRoom && (
+            <fieldset className="rounded-xl border border-slate-200 p-4">
+              <legend className="px-1 text-[13px] font-semibold text-slate-800">Devices</legend>
+              <p className="mb-3 text-xs text-slate-500">
+                Created together with the room as "Fan 1…N" and "Tube 1…N", the names the ESP32 and camera use.
+                You can add or edit devices later.
+              </p>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label htmlFor="fan_count" className="label">Fans</label>
+                  <input
+                    id="fan_count"
+                    name="fan_count"
+                    type="number"
+                    min="0"
+                    max="50"
+                    value={form.fan_count}
+                    onChange={handleFormChange}
+                    className="input num"
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="light_count" className="label">Tube lights</label>
+                  <input
+                    id="light_count"
+                    name="light_count"
+                    type="number"
+                    min="0"
+                    max="50"
+                    value={form.light_count}
+                    onChange={handleFormChange}
+                    className="input num"
+                  />
+                </div>
+              </div>
+
+              <label className="mt-3 flex items-center gap-2 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  name="add_node_devices"
+                  checked={form.add_node_devices}
+                  onChange={handleFormChange}
+                  className="h-4 w-4 rounded border-slate-300"
+                />
+                Also add the ESP32 node and the camera
+              </label>
+            </fieldset>
+          )}
         </form>
       </Modal>
     </AppShell>

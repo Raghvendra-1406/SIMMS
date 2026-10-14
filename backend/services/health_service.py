@@ -94,6 +94,21 @@ def extract_power(electrical_observation):
 
     data = electrical_observation[5]
 
+    circuits = data.get("circuits")
+
+    if isinstance(circuits, dict):
+        main = circuits.get("MAIN")
+
+        if isinstance(main, dict) and main.get("power") is not None:
+            return main["power"]
+
+        # No main-supply meter: sum the metered circuits.
+        return sum(
+            float(reading.get("power") or 0)
+            for reading in circuits.values()
+            if isinstance(reading, dict)
+        )
+
     return data.get("power")
 
 

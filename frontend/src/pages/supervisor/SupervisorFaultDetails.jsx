@@ -44,6 +44,8 @@ function formatDateTime(value) {
 function getFaultTypeLabel(faultType) {
   const labels = {
     FAN_FAILURE: "Fan failure",
+    LIGHT_FAILURE: "Light failure",
+    ENERGY_WASTAGE: "Energy wastage",
     LIGHTS_LEFT_ON: "Lights left on",
     BOARD_NEEDS_CLEANING: "Board needs cleaning",
     ELECTRICAL_ABNORMALITY:
@@ -63,6 +65,8 @@ function getFaultTypeLabel(faultType) {
 const FAULT_TYPE_META = {
   FAN_FAILURE: { icon: "fan", tone: "warning" },
   LIGHTS_LEFT_ON: { icon: "lightbulb", tone: "warning" },
+  LIGHT_FAILURE: { icon: "lightbulb", tone: "danger" },
+  ENERGY_WASTAGE: { icon: "zap", tone: "warning" },
   BOARD_NEEDS_CLEANING: { icon: "clipboard", tone: "info" },
   ELECTRICAL_ABNORMALITY: { icon: "zap", tone: "danger" },
 };
@@ -354,6 +358,14 @@ export default function SupervisorFaultDetails() {
                 {/* Left column */}
                 <div className="space-y-6">
                   <Card title="Fault details" subtitle="Read from the backend fault record" icon="alert">
+                    {(fault.details?.summary || fault.details?.abnormal?.length > 0) && (
+                      <div className="mb-5 rounded-lg border border-red-200 bg-red-50/60 px-4 py-3">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-red-700">What was detected</p>
+                        <p className="mt-1 text-sm font-medium text-red-900">
+                          {fault.details.summary || fault.details.abnormal.join(", ")}
+                        </p>
+                      </div>
+                    )}
                     <dl className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
                       <DetailItem label="Fault type">{getFaultTypeLabel(fault.fault_type)}</DetailItem>
                       <DetailItem label="Status">{fault.status ? formatLabel(fault.status) : "Unknown"}</DetailItem>

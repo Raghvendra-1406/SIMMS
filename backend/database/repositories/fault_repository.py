@@ -1,3 +1,5 @@
+from psycopg2.extras import Json
+
 from database.connection import get_connection
 
 
@@ -8,7 +10,8 @@ def create_fault_event(
     detected_at,
     confidence=None,
     abnormal_count=None,
-    recurrence_type=None
+    recurrence_type=None,
+    details=None
 ):
     conn = get_connection()
     cursor = conn.cursor()
@@ -22,9 +25,10 @@ def create_fault_event(
                 detected_at,
                 confidence,
                 abnormal_count,
-                recurrence_type
+                recurrence_type,
+                details
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING
                 fault_id,
                 room_id,
@@ -44,7 +48,8 @@ def create_fault_event(
             detected_at,
             confidence,
             abnormal_count,
-            recurrence_type
+            recurrence_type,
+            Json(details) if details is not None else None
         ))
 
         fault = cursor.fetchone()
@@ -316,6 +321,30 @@ def lock_fault_identity(room_id, fault_type, device_id=None):
         """, (
             f"fault:{room_id}:{fault_type}:{device_id}",
         ))
+
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def get_fault_details(fault_id):
+    """
+    What the detector saw when it confirmed the fault, or None.
+    """
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute("""
+            SELECT details
+            FROM fault_events
+            WHERE fault_id = %s
+        """, (fault_id,))
+
+        row = cursor.fetchone()
+
+        return row[0] if row else None
 
     finally:
         cursor.close()

@@ -41,6 +41,7 @@ It's already set up. Apply any migrations the database doesn't have yet (safe to
 ```powershell
 psql "<DATABASE_URL>" -f backend/database/migrations/001_node_status.sql
 psql "<DATABASE_URL>" -f backend/database/migrations/002_ticket_reliability.sql
+psql "<DATABASE_URL>" -f backend/database/migrations/003_circuit_monitoring.sql
 psql "<DATABASE_URL>" -f backend/database/migrations/004_calibration_images.sql
 ```
 

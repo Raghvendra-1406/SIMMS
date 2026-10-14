@@ -39,6 +39,8 @@ function getDisplayValue(value, suffix = "") {
 function getFaultTypeLabel(faultType) {
   const labels = {
     FAN_FAILURE: "Fan failure",
+    LIGHT_FAILURE: "Light failure",
+    ENERGY_WASTAGE: "Energy wastage",
     LIGHTS_LEFT_ON: "Lights left on",
     BOARD_NEEDS_CLEANING: "Board needs cleaning",
     ELECTRICAL_ABNORMALITY: "Electrical abnormality",

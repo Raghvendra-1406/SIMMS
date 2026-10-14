@@ -20,16 +20,17 @@ def create_vision_calibration(
         )
 
     fans = calibration_data.get("fans") or []
+    lights = calibration_data.get("lights") or []
     seats = calibration_data.get("seats") or []
     board = calibration_data.get("board")
 
-    if not fans and not seats and board is None:
+    if not fans and not lights and not seats and board is None:
         raise ValueError(
-            "Calibration must contain at least one fan, "
+            "Calibration must contain at least one fan, tube light, "
             "seat or board region."
         )
 
-    for region in [*fans, *seats, *([board] if board else [])]:
+    for region in [*fans, *lights, *seats, *([board] if board else [])]:
         if region["x2"] <= region["x1"] or region["y2"] <= region["y1"]:
             raise ValueError(
                 "Each region must have x2 > x1 and y2 > y1."
@@ -42,15 +43,15 @@ def create_vision_calibration(
             "Seat IDs must be unique."
         )
 
-    for fan in fans:
-        device_id = fan["device_id"]
+    for unit in [*fans, *lights]:
+        device_id = unit["device_id"]
 
         if not device_belongs_to_room(
             device_id,
             room_id
         ):
             raise ValueError(
-                f"Fan device {device_id} does not belong "
+                f"Device {device_id} does not belong "
                 f"to room {room_id}."
             )
 

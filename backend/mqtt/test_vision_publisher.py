@@ -25,6 +25,7 @@ def main():
                 "confidence": 0.91
             }
         ],
+        "lights": [],
         "board": {
             "state": "CLEAN",
             "ink_ratio": 0.01,

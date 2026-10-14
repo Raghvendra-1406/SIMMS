@@ -38,7 +38,7 @@ function formatDate(value) {
 const CALIBRATION_STEPS = [
   "Select a classroom.",
   "Upload a camera image of the empty classroom.",
-  "Choose what to draw: the board, a seat, or a fan.",
+  "Choose what to draw: the board, a seat, a fan or a tube light.",
   "Click and drag over that area. Draw one box per seat or bench.",
   "The rectangle appears live while you drag.",
   "Save the calibration.",
@@ -47,6 +47,7 @@ const CALIBRATION_STEPS = [
 const BOARD_TARGET = "board";
 const SEAT_TARGET = "seat";
 const FAN_TARGET_PREFIX = "fan:";
+const LIGHT_TARGET_PREFIX = "light:";
 
 /*
  * Seat IDs are assigned in order: seat_01, seat_02, ...
@@ -112,6 +113,9 @@ export default function AdminCalibration() {
     useState("");
 
   const [fanBoxes, setFanBoxes] =
+    useState([]);
+
+  const [lightBoxes, setLightBoxes] =
     useState([]);
 
   const [boardBox, setBoardBox] =
@@ -252,6 +256,12 @@ export default function AdminCalibration() {
         "FAN"
   );
 
+  const lightDevices = roomDevices.filter(
+    (device) =>
+      device.device_type?.toUpperCase() ===
+        "LIGHT"
+  );
+
   /*
    * ---------------------------------------------------------
    * LOAD ACTIVE CALIBRATION
@@ -280,6 +290,7 @@ export default function AdminCalibration() {
       if (response.status === 404) {
         setActiveCalibration(null);
         setFanBoxes([]);
+        setLightBoxes([]);
         setBoardBox(null);
         setSeatBoxes([]);
         setSavedImagePath("");
@@ -333,6 +344,16 @@ export default function AdminCalibration() {
           : []
       );
 
+      const savedLights =
+        calibration?.calibration_data
+          ?.lights || [];
+
+      setLightBoxes(
+        Array.isArray(savedLights)
+          ? savedLights
+          : []
+      );
+
       const savedBoard =
         calibration?.calibration_data
           ?.board || null;
@@ -383,6 +404,7 @@ export default function AdminCalibration() {
     setSavedImagePath("");
 
     setFanBoxes([]);
+    setLightBoxes([]);
     setBoardBox(null);
     setSeatBoxes([]);
     setCurrentBox(null);
@@ -433,6 +455,7 @@ export default function AdminCalibration() {
      * a new calibration.
      */
     setFanBoxes([]);
+    setLightBoxes([]);
     setBoardBox(null);
     setSeatBoxes([]);
     setCurrentBox(null);
@@ -696,6 +719,33 @@ export default function AdminCalibration() {
       setSuccess(
         "Fan area selected. You can draw another area or save the calibration."
       );
+      return;
+    }
+
+    if (drawTarget.startsWith(LIGHT_TARGET_PREFIX)) {
+      const deviceId = Number(
+        drawTarget.slice(LIGHT_TARGET_PREFIX.length)
+      );
+
+      /*
+       * Replace an existing box for the
+       * same tube light.
+       */
+      setLightBoxes((previous) => [
+        ...previous.filter(
+          (lightBox) =>
+            Number(lightBox.device_id) !==
+            deviceId
+        ),
+        {
+          device_id: deviceId,
+          ...box,
+        },
+      ]);
+
+      setSuccess(
+        "Tube light area selected. Draw it tightly around the tube."
+      );
     }
   };
 
@@ -859,6 +909,16 @@ export default function AdminCalibration() {
     );
   };
 
+  const removeLightBox = (deviceId) => {
+    setLightBoxes((previous) =>
+      previous.filter(
+        (box) =>
+          Number(box.device_id) !==
+          Number(deviceId)
+      )
+    );
+  };
+
   const removeSeatBox = (seatId) => {
     setSeatBoxes((previous) =>
       previous.filter(
@@ -885,7 +945,7 @@ export default function AdminCalibration() {
 
     return (
       device?.device_name ||
-      `Fan ${deviceId}`
+      `Device ${deviceId}`
     );
   };
 
@@ -904,11 +964,18 @@ export default function AdminCalibration() {
       );
     }
 
+    if (drawTarget.startsWith(LIGHT_TARGET_PREFIX)) {
+      return getDeviceName(
+        drawTarget.slice(LIGHT_TARGET_PREFIX.length)
+      );
+    }
+
     return "";
   };
 
   const regionCount =
     fanBoxes.length +
+    lightBoxes.length +
     seatBoxes.length +
     (boardBox ? 1 : 0);
 
@@ -1043,6 +1110,14 @@ export default function AdminCalibration() {
           })
         ),
 
+        lights: lightBoxes.map(
+          (box) => ({
+            device_id:
+              Number(box.device_id),
+            ...toSavedBox(box),
+          })
+        ),
+
         seats: seatBoxes.map(
           (box) => ({
             seat_id: box.seat_id,
@@ -1162,6 +1237,15 @@ export default function AdminCalibration() {
       iconClass: "bg-brand-50 text-brand-600",
       box,
       onRemove: () => removeFanBox(box.device_id),
+    })),
+
+    ...lightBoxes.map((box) => ({
+      key: `light-${box.device_id}`,
+      label: getDeviceName(box.device_id),
+      icon: "lightbulb",
+      iconClass: "bg-amber-50 text-amber-600",
+      box,
+      onRemove: () => removeLightBox(box.device_id),
     })),
   ];
 
@@ -1352,17 +1436,31 @@ export default function AdminCalibration() {
                     ))}
                   </optgroup>
                 )}
+
+                {lightDevices.length > 0 && (
+                  <optgroup label="Tube lights">
+                    {lightDevices.map((device) => (
+                      <option
+                        key={device.device_id}
+                        value={`${LIGHT_TARGET_PREFIX}${device.device_id}`}
+                      >
+                        {device.device_name}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
               </select>
 
               {selectedRoomId &&
-              fanDevices.length === 0 ? (
+              fanDevices.length === 0 &&
+              lightDevices.length === 0 ? (
                 <p className="mt-1.5 flex items-start gap-1.5 text-xs text-amber-700">
                   <Icon
                     name="alert"
                     className="mt-px h-3.5 w-3.5 shrink-0"
                   />
-                  No active fan devices are
-                  registered for this classroom.
+                  No active fan or tube-light devices
+                  are registered for this classroom.
                   Board and seats can still be drawn.
                 </p>
               ) : (
@@ -1647,6 +1745,23 @@ export default function AdminCalibration() {
                   </div>
                 ))}
 
+                {/* SAVED TUBE LIGHT BOXES */}
+                {lightBoxes.map((box) => (
+                  <div
+                    key={`light-${box.device_id}`}
+                    className="pointer-events-none absolute border-2 border-amber-400 bg-amber-300/20 shadow-[0_0_0_1px_rgba(0,0,0,0.25)]"
+                    style={getDisplayBoxStyle(
+                      box
+                    )}
+                  >
+                    <div className="absolute -top-6 left-0 whitespace-nowrap rounded-md bg-amber-500 px-1.5 py-0.5 text-[10px] font-semibold text-ink-950">
+                      {getDeviceName(
+                        box.device_id
+                      )}
+                    </div>
+                  </div>
+                ))}
+
                 {/* SAVED FAN BOXES */}
                 {fanBoxes.map((box) => (
                   <div
@@ -1687,10 +1802,10 @@ export default function AdminCalibration() {
             <dl className="mt-4 grid gap-3 sm:grid-cols-3">
               <div className="rounded-lg border border-slate-200 bg-slate-50/70 px-4 py-3">
                 <dt className="text-xs font-medium text-slate-500">
-                  Board · seats · fans
+                  Board · seats · fans · tubes
                 </dt>
                 <dd className="num mt-1 text-xl font-semibold text-slate-900">
-                  {boardBox ? 1 : 0} · {seatBoxes.length} · {fanBoxes.length}
+                  {boardBox ? 1 : 0} · {seatBoxes.length} · {fanBoxes.length} · {lightBoxes.length}
                 </dd>
               </div>
 
@@ -1801,7 +1916,7 @@ export default function AdminCalibration() {
               {activeCalibration.room_id}
             </DetailItem>
 
-            <DetailItem label="Board · seats · fans" mono>
+            <DetailItem label="Board · seats · fans · tubes" mono>
               {activeCalibration.calibration_data
                 ?.board
                 ? 1
@@ -1811,7 +1926,10 @@ export default function AdminCalibration() {
                 ?.seats?.length || 0}{" "}
               ·{" "}
               {activeCalibration.calibration_data
-                ?.fans?.length || 0}
+                ?.fans?.length || 0}{" "}
+              ·{" "}
+              {activeCalibration.calibration_data
+                ?.lights?.length || 0}
             </DetailItem>
 
             <DetailItem label="Created" mono>

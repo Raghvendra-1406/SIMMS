@@ -140,6 +140,36 @@ HEALTH_INTERVAL_SECONDS = int(
 )
 
 
+# ---------------------------------------------------------
+# CIRCUIT MONITORING
+#
+# Electrical sensing is per circuit, not per appliance: one meter on
+# the lights circuit, one on the fans circuit, optionally one on the
+# main supply. How many units are powered is derived from circuit
+# current / per-unit current; which unit is faulty comes from the
+# camera (Plan v2 §8.5).
+# ---------------------------------------------------------
+
+# Per-unit current used until a baseline is learned for the room
+# (admin: Classroom details -> Circuits -> Learn).
+DEFAULT_FAN_CURRENT_A = float(os.getenv("DEFAULT_FAN_CURRENT_A", "0.30"))
+DEFAULT_LIGHT_CURRENT_A = float(os.getenv("DEFAULT_LIGHT_CURRENT_A", "0.10"))
+
+# A circuit is overloaded above
+#   all units x unit current x OVERLOAD_FACTOR + standby + OVERLOAD_MARGIN_A
+CIRCUIT_OVERLOAD_FACTOR = float(os.getenv("CIRCUIT_OVERLOAD_FACTOR", "1.25"))
+CIRCUIT_OVERLOAD_MARGIN_A = float(os.getenv("CIRCUIT_OVERLOAD_MARGIN_A", "0.5"))
+
+# Main supply limits (classroom breaker rating).
+MAIN_CURRENT_MAX_A = float(os.getenv("MAIN_CURRENT_MAX_A", "32"))
+
+VOLTAGE_MIN_V = float(os.getenv("VOLTAGE_MIN_V", "200"))
+VOLTAGE_MAX_V = float(os.getenv("VOLTAGE_MAX_V", "250"))
+
+# Power factor is only judged when the load is large enough to matter.
+POWER_FACTOR_MIN = float(os.getenv("POWER_FACTOR_MIN", "0.5"))
+POWER_FACTOR_MIN_CURRENT_A = float(os.getenv("POWER_FACTOR_MIN_CURRENT_A", "1.0"))
+
 
 # ---------------------------------------------------------
 # DEPLOYMENT

@@ -47,6 +47,8 @@ function formatDateTime(value) {
 function getFaultTypeLabel(faultType) {
   const labels = {
     FAN_FAILURE: "Fan failure",
+    LIGHT_FAILURE: "Light failure",
+    ENERGY_WASTAGE: "Energy wastage",
     LIGHTS_LEFT_ON: "Lights left on",
     BOARD_NEEDS_CLEANING: "Board needs cleaning",
     ELECTRICAL_ABNORMALITY:
@@ -66,6 +68,8 @@ function getFaultTypeLabel(faultType) {
 const FAULT_TYPE_META = {
   FAN_FAILURE: { icon: "fan", tone: "warning" },
   LIGHTS_LEFT_ON: { icon: "lightbulb", tone: "warning" },
+  LIGHT_FAILURE: { icon: "lightbulb", tone: "danger" },
+  ENERGY_WASTAGE: { icon: "zap", tone: "warning" },
   BOARD_NEEDS_CLEANING: { icon: "clipboard", tone: "info" },
   ELECTRICAL_ABNORMALITY: { icon: "zap", tone: "danger" },
 };
@@ -187,12 +191,16 @@ export default function SupervisorFaults() {
       search.trim().toLowerCase();
 
     return faults.filter((fault) => {
+      const faultType = String(
+        fault.fault_type || ""
+      ).toUpperCase();
+
+      // Older "lights left on" faults count as energy wastage.
       const matchesType =
         faultTypeFilter === "ALL" ||
-        String(
-          fault.fault_type || ""
-        ).toUpperCase() ===
-          faultTypeFilter;
+        faultType === faultTypeFilter ||
+        (faultTypeFilter === "ENERGY_WASTAGE" &&
+          faultType === "LIGHTS_LEFT_ON");
 
       if (!matchesType) {
         return false;
@@ -249,14 +257,22 @@ export default function SupervisorFaults() {
     [faults]
   );
 
-  const lightsLeftOn = useMemo(
+  const energyWastage = useMemo(
+    () =>
+      faults.filter((fault) =>
+        ["ENERGY_WASTAGE", "LIGHTS_LEFT_ON"].includes(
+          String(fault.fault_type || "").toUpperCase()
+        )
+      ).length,
+    [faults]
+  );
+
+  const lightFailures = useMemo(
     () =>
       faults.filter(
         (fault) =>
-          String(
-            fault.fault_type || ""
-          ).toUpperCase() ===
-          "LIGHTS_LEFT_ON"
+          String(fault.fault_type || "").toUpperCase() ===
+          "LIGHT_FAILURE"
       ).length,
     [faults]
   );
@@ -288,7 +304,8 @@ export default function SupervisorFaults() {
   const typeOptions = [
     { value: "ALL", label: "All types", count: loading ? undefined : faults.length },
     { value: "FAN_FAILURE", label: "Fan failure", count: loading ? undefined : fanFailures },
-    { value: "LIGHTS_LEFT_ON", label: "Lights left on", count: loading ? undefined : lightsLeftOn },
+    { value: "LIGHT_FAILURE", label: "Light failure", count: loading ? undefined : lightFailures },
+    { value: "ENERGY_WASTAGE", label: "Energy wastage", count: loading ? undefined : energyWastage },
     { value: "ELECTRICAL_ABNORMALITY", label: "Electrical", count: loading ? undefined : electricalFaults },
     { value: "BOARD_NEEDS_CLEANING", label: "Board cleaning", count: loading ? undefined : boardCleaning },
   ];
@@ -337,13 +354,13 @@ export default function SupervisorFaults() {
         />
         <StatCard
           unavailable={loadFailed}
-          label="Lights left on"
-          value={lightsLeftOn}
-          hint="Confirmed lighting wastage"
-          icon="lightbulb"
-          tone={lightsLeftOn > 0 ? "warning" : "neutral"}
+          label="Energy wastage"
+          value={energyWastage}
+          hint="Lights / fans on in an empty room"
+          icon="zap"
+          tone={energyWastage > 0 ? "warning" : "neutral"}
           loading={loading}
-          onClick={() => setFaultTypeFilter("LIGHTS_LEFT_ON")}
+          onClick={() => setFaultTypeFilter("ENERGY_WASTAGE")}
         />
         <StatCard
           unavailable={loadFailed}

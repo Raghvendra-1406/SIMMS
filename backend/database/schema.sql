@@ -53,6 +53,7 @@ CREATE TABLE fault_events (
     confidence DECIMAL(5,2),
     abnormal_count INTEGER,
     recurrence_type VARCHAR(30),
+    details JSONB,
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -170,6 +171,21 @@ CREATE TABLE calibration_images (
     data BYTEA NOT NULL,
     created_by INTEGER REFERENCES users(user_id),
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+
+-- Per-unit current per room circuit (learned during commissioning).
+CREATE TABLE circuit_baselines (
+    circuit_baseline_id SERIAL PRIMARY KEY,
+    room_id INTEGER NOT NULL
+        REFERENCES rooms(room_id) ON DELETE CASCADE,
+    circuit VARCHAR(20) NOT NULL
+        CHECK (circuit IN ('LIGHTS', 'FANS')),
+    unit_current_a DECIMAL(8,3) NOT NULL,
+    standby_current_a DECIMAL(8,3) NOT NULL DEFAULT 0,
+    learned_units INTEGER,
+    learned_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (room_id, circuit)
 );
 
 

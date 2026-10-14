@@ -4,7 +4,7 @@ Create the demo classroom and devices used by the simulation.
 Safe to run repeatedly: existing rows are kept.
 
     cd backend
-    python -m scripts.seed_demo            # room R101
+    python -m scripts.seed_demo            # room R101: 6 fans, 6 tube lights
     python -m scripts.seed_demo --room R102
 """
 
@@ -24,8 +24,12 @@ from services.device_service import add_device
 
 
 # Names must match firmware/simms_node/src/config.h.
+FANS_PER_ROOM = 6
+LIGHTS_PER_ROOM = 6
+
 DEMO_DEVICES = [
-    ("FAN", "Fan 1"),
+    *[("FAN", f"Fan {n}") for n in range(1, FANS_PER_ROOM + 1)],
+    *[("LIGHT", f"Tube {n}") for n in range(1, LIGHTS_PER_ROOM + 1)],
     ("SENSOR_NODE", "ESP32 Node"),
     ("CAMERA", "Camera"),
 ]

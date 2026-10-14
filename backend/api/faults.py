@@ -12,11 +12,15 @@ from schemas.fault_schema import (
 )
 
 from services.fault_detector import (
-    FAULT_FAN_FAILURE,
-    FAULT_LIGHTS_LEFT_ON,
-    FAULT_ELECTRICAL_ABNORMALITY,
-    FAULT_BOARD_NEEDS_CLEANING,
     detect_fault,
+)
+
+from services.fault_types import (
+    ALL_FAULT_TYPES,
+)
+
+from database.repositories.fault_repository import (
+    get_fault_details,
 )
 
 from services.fault_service import (
@@ -35,12 +39,7 @@ router = APIRouter(
 )
 
 
-ALLOWED_FAULT_TYPES = {
-    FAULT_FAN_FAILURE,
-    FAULT_LIGHTS_LEFT_ON,
-    FAULT_ELECTRICAL_ABNORMALITY,
-    FAULT_BOARD_NEEDS_CLEANING,
-}
+ALLOWED_FAULT_TYPES = ALL_FAULT_TYPES
 
 
 def fault_to_response(fault):
@@ -163,7 +162,10 @@ def get_fault_endpoint(
     try:
         fault = get_fault(fault_id)
 
-        return fault_to_response(fault)
+        return {
+            **fault_to_response(fault),
+            "details": get_fault_details(fault_id),
+        }
 
     except ValueError as exc:
         raise HTTPException(

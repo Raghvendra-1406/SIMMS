@@ -259,6 +259,12 @@ function MaintenanceTickets() {
             case "LIGHTS_LEFT_ON":
                 return "Lights Left On";
 
+            case "LIGHT_FAILURE":
+                return "Light Failure";
+
+            case "ENERGY_WASTAGE":
+                return "Energy Wastage";
+
             case "BOARD_NEEDS_CLEANING":
                 return "Board Needs Cleaning";
 

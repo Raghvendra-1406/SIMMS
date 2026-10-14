@@ -1,13 +1,16 @@
 // =========================================================
-// SIMMS classroom IoT node (ESP32)
+// SIMMS classroom IoT node (ESP32) - circuit-level metering
 //
 // Publishes to MQTT (Plan v2 §14.2), under an optional prefix:
-//   classroom/<room>/sensors            electrical, environment, light
-//   classroom/<room>/vision             virtual camera (simulation only)
+//   classroom/<room>/sensors            {"voltage", "circuits": {MAIN, LIGHTS, FANS}}
+//                                       and environment (temperature, humidity)
+//   classroom/<room>/vision             virtual camera (simulation only):
+//                                       occupancy, board, {"fans": [...]},
+//                                       {"lights": [...]}
 //   classroom/<room>/status/<node_id>   retained ONLINE heartbeat,
 //                                       last-will OFFLINE
 // Subscribes to:
-//   classroom/<room>/command            {"target":"LAMP|FAN","state":"ON|OFF"}
+//   classroom/<room>/command            {"target":"LIGHTS|FANS","state":"ON|OFF"}
 //
 // Message shapes match backend/scripts/fake_node.py.
 // =========================================================
@@ -15,9 +18,12 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
+#include <Wire.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
 #include <DHTesp.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
 
 #include "config.h"
 
@@ -64,23 +70,36 @@ WiFiClient wifiClient;
 #endif
 PubSubClient mqtt(wifiClient);
 DHTesp dht;
+Adafruit_SSD1306 display(128, 64, &Wire, -1);
+bool displayReady = false;
 
 #if !SIMULATION
-PZEM004Tv30 pzem(Serial2, PIN_PZEM_RX, PIN_PZEM_TX);
+PZEM004Tv30 pzemLights(Serial2, PIN_PZEM_RX, PIN_PZEM_TX, PZEM_ADDR_LIGHTS);
+PZEM004Tv30 pzemFans(Serial2, PIN_PZEM_RX, PIN_PZEM_TX, PZEM_ADDR_FANS);
+#if HAS_MAIN_METER
+PZEM004Tv30 pzemMain(Serial2, PIN_PZEM_RX, PIN_PZEM_TX, PZEM_ADDR_MAIN);
+#endif
 #endif
 
-bool lampOn = LAMP_ON_AT_BOOT;
-bool fanOn = FAN_ON_AT_BOOT;
+// Demo-panel circuit relays.
+bool lightsRelayOn = LIGHTS_ON_AT_BOOT;
+bool fansRelayOn = FANS_ON_AT_BOOT;
 
-double energyKwh = 0.0;
+// Simulation fault injection: 0 = none, otherwise the unit number.
+int blockedFan = 0;
+int failedTube = 0;
+
+// Energy per circuit (kWh), integrated in the simulation.
+double energyMain = 0, energyLights = 0, energyFans = 0;
 unsigned long lastEnergyUpdateMs = 0;
 
 unsigned long lastSensorMs = 0;
 unsigned long lastVisionMs = 0;
 unsigned long lastStatusMs = 0;
+unsigned long lastDisplayMs = 0;
 unsigned long lastMqttAttemptMs = 0;
 
-// Set by commands / wall switches: publish the new state now.
+// Set by commands / buttons: publish the new state now.
 bool reportNow = false;
 
 bool cameraWasOffline = false;
@@ -97,8 +116,8 @@ struct Button {
   unsigned long lastChangeMs;
 };
 
-Button lampButton = {PIN_LAMP_BUTTON, HIGH, HIGH, 0};
-Button fanButton = {PIN_FAN_BUTTON, HIGH, HIGH, 0};
+Button fanFaultButton = {PIN_BTN_FAN_FAULT, HIGH, HIGH, 0};
+Button tubeFaultButton = {PIN_BTN_TUBE_FAULT, HIGH, HIGH, 0};
 
 // Returns true once per press (debounced, active LOW).
 bool buttonPressed(Button &button) {
@@ -144,15 +163,15 @@ void writeRelay(uint8_t pin, bool on) {
 }
 
 void applyRelays() {
-  writeRelay(PIN_LAMP_RELAY, lampOn);
-  writeRelay(PIN_FAN_RELAY, fanOn);
+  writeRelay(PIN_LIGHTS_RELAY, lightsRelayOn);
+  writeRelay(PIN_FANS_RELAY, fansRelayOn);
 }
 
 void setRelay(const String &target, bool on, const char *source) {
-  if (target == "LAMP") {
-    lampOn = on;
-  } else if (target == "FAN") {
-    fanOn = on;
+  if (target == "LIGHTS") {
+    lightsRelayOn = on;
+  } else if (target == "FANS") {
+    fansRelayOn = on;
   } else {
     return;
   }
@@ -160,105 +179,136 @@ void setRelay(const String &target, bool on, const char *source) {
   applyRelays();
   reportNow = true;
 
-  Serial.printf("[relay] %s -> %s (%s)\n", target.c_str(), on ? "ON" : "OFF", source);
+  Serial.printf("[relay] %s circuit -> %s (%s)\n", target.c_str(), on ? "ON" : "OFF", source);
 }
+
+
+// ---------------------------------------------------------
+// Units (simulation): which fans / tubes are on and working
+// ---------------------------------------------------------
+
+// Switched-on units are Fan 1..N / Tube 1..N.
+int fansSwitchedOn() {
+#if SIMULATION
+  int n = (int)roundf(adcFraction(PIN_POT_FANS_ON) * FAN_COUNT);
+  return fansRelayOn ? n : 0;
+#else
+  return 0;  // unknown on hardware: the backend derives it from current
+#endif
+}
+
+int tubesSwitchedOn() {
+#if SIMULATION
+  int n = (int)roundf(adcFraction(PIN_POT_LIGHTS_ON) * TUBE_COUNT);
+  return lightsRelayOn ? n : 0;
+#else
+  return 0;
+#endif
+}
+
+bool fanPowered(int number) { return number <= fansSwitchedOn(); }
+bool fanRotating(int number) { return fanPowered(number) && number != blockedFan; }
+bool tubePowered(int number) { return number <= tubesSwitchedOn(); }
+bool tubeLit(int number) { return tubePowered(number) && number != failedTube; }
 
 
 // ---------------------------------------------------------
 // Measurements
 // ---------------------------------------------------------
 
-struct Electrical {
-  float voltage;
+struct Circuit {
   float current;
   float power;
   float powerFactor;
-  float fanCurrent;
+  double energy;
   bool valid;
+};
+
+struct Electrical {
+  float voltage;
+  Circuit main;
+  Circuit lights;
+  Circuit fans;
+  bool hasMain;
 };
 
 #if SIMULATION
 
-// Knob -> fan branch current. Up to 3/4 turn is a normal table fan
-// (0.25-0.45 A); the last quarter ramps to 25 A (overcurrent fault).
-float simulatedFanLoad() {
-  float fraction = adcFraction(PIN_FAN_CURRENT);
-
-  if (fraction <= 0.75f) {
-    return 0.25f + (fraction / 0.75f) * 0.20f;
-  }
-
-  return 0.45f + ((fraction - 0.75f) / 0.25f) * 24.55f;
+Circuit simulatedCircuit(float voltage, float current, float powerFactor, double &energy, unsigned long elapsedMs) {
+  Circuit c;
+  c.current = current;
+  c.powerFactor = powerFactor;
+  c.power = voltage * current * powerFactor;
+  energy += c.power * elapsedMs / 3600000000.0;  // W*ms -> kWh
+  c.energy = energy;
+  c.valid = true;
+  return c;
 }
 
 Electrical readElectrical() {
-  Electrical e;
+  unsigned long now = millis();
+  unsigned long elapsed = lastEnergyUpdateMs ? now - lastEnergyUpdateMs : 0;
+  lastEnergyUpdateMs = now;
 
+  Electrical e;
   e.voltage = 180.0f + adcFraction(PIN_POT_VOLTAGE) * 80.0f;
-  e.fanCurrent = fanOn ? simulatedFanLoad() : 0.0f;
 
-  float lampCurrent = lampOn ? LAMP_CURRENT_A : 0.0f;
+  float fansCurrent = CIRCUIT_STANDBY_A;
+  for (int n = 1; n <= fansSwitchedOn(); n++) {
+    fansCurrent += (n == blockedFan) ? STALLED_FAN_CURRENT_A : FAN_CURRENT_A;
+  }
+  if (switchActive(PIN_FANS_OVERLOAD)) {
+    fansCurrent += OVERLOAD_CURRENT_A;
+  }
 
-  e.current = e.fanCurrent + lampCurrent + BASE_CURRENT_A;
-  e.powerFactor = POWER_FACTOR;
-  e.power = e.voltage * e.current * e.powerFactor;
-  e.valid = true;
+  // A failed tube (faulty driver) still draws current.
+  float lightsCurrent = CIRCUIT_STANDBY_A + tubesSwitchedOn() * TUBE_CURRENT_A;
+
+  e.fans = simulatedCircuit(e.voltage, fansCurrent, FANS_POWER_FACTOR, energyFans, elapsed);
+  e.lights = simulatedCircuit(e.voltage, lightsCurrent, LIGHTS_POWER_FACTOR, energyLights, elapsed);
+
+  float mainCurrent = fansCurrent + lightsCurrent + SOCKETS_CURRENT_A;
+  float mainPower = e.fans.power + e.lights.power + e.voltage * SOCKETS_CURRENT_A * SOCKETS_POWER_FACTOR;
+  e.main = simulatedCircuit(e.voltage, mainCurrent, mainPower / (e.voltage * mainCurrent), energyMain, elapsed);
+  e.hasMain = true;
 
   return e;
 }
 
 #else
 
-// RMS current from the SCT-013-030 (voltage output, 1 V = 30 A),
-// biased at mid-supply on the ADC pin.
-float readCtCurrent() {
-  const int samples = 1000;
-  float sum = 0;
-  float sumSquares = 0;
-
-  for (int i = 0; i < samples; i++) {
-    float volts = analogReadMilliVolts(PIN_FAN_CURRENT) / 1000.0f;
-    sum += volts;
-    sumSquares += volts * volts;
-  }
-
-  float mean = sum / samples;
-  float variance = sumSquares / samples - mean * mean;
-  float vrms = variance > 0 ? sqrtf(variance) : 0;
-  float amps = vrms * CT_AMPS_PER_VOLT;
-
-  return amps < 0.05f ? 0.0f : amps;
+Circuit readPzem(PZEM004Tv30 &meter) {
+  Circuit c;
+  c.current = meter.current();
+  c.power = meter.power();
+  c.powerFactor = meter.pf();
+  c.energy = meter.energy();
+  c.valid = !isnan(c.current) && !isnan(c.power);
+  return c;
 }
 
 Electrical readElectrical() {
   Electrical e;
 
-  e.voltage = pzem.voltage();
-  e.current = pzem.current();
-  e.power = pzem.power();
-  e.powerFactor = pzem.pf();
-  e.fanCurrent = readCtCurrent();
-  e.valid = !isnan(e.voltage) && !isnan(e.current);
+  e.lights = readPzem(pzemLights);
+  e.fans = readPzem(pzemFans);
+  e.voltage = pzemLights.voltage();
 
-  float kwh = pzem.energy();
-  if (!isnan(kwh)) {
-    energyKwh = kwh;
+  if (isnan(e.voltage)) {
+    e.voltage = pzemFans.voltage();
   }
+
+#if HAS_MAIN_METER
+  e.main = readPzem(pzemMain);
+  e.hasMain = e.main.valid;
+#else
+  e.hasMain = false;
+#endif
 
   return e;
 }
 
 #endif
-
-float lampBranchCurrent(const Electrical &e) {
-#if SIMULATION
-  return lampOn ? LAMP_CURRENT_A : 0.0f;
-#else
-  // Total minus the independently measured fan branch.
-  float lamp = e.current - e.fanCurrent - BASE_CURRENT_A;
-  return lamp > 0 ? lamp : 0;
-#endif
-}
 
 // 0-100 %, brighter = higher. The LDR module's AO voltage falls
 // as light increases.
@@ -272,7 +322,7 @@ int readLightLevel() {
 // ---------------------------------------------------------
 
 bool publishJson(const String &topic, JsonDocument &doc, bool retain = false) {
-  char buffer[512];
+  char buffer[1024];
   size_t length = serializeJson(doc, buffer, sizeof(buffer));
 
   bool ok = mqtt.publish(topic.c_str(), (const uint8_t *)buffer, length, retain);
@@ -296,38 +346,41 @@ void publishNodeStatus() {
   doc["simulation"] = (bool)SIMULATION;
 
   JsonObject relays = doc["relays"].to<JsonObject>();
-  relays["lamp"] = lampOn;
-  relays["fan"] = fanOn;
+  relays["lights"] = lightsRelayOn;
+  relays["fans"] = fansRelayOn;
 
   publishJson(NODE_STATUS_TOPIC, doc, true);
 }
 
-void publishSensors() {
-  unsigned long now = millis();
+void addCircuit(JsonObject circuits, const char *name, const Circuit &c) {
+  if (!c.valid) {
+    return;
+  }
 
+  JsonObject o = circuits[name].to<JsonObject>();
+  o["current"] = roundf(c.current * 1000) / 1000;
+  o["power"] = roundf(c.power * 10) / 10;
+  o["power_factor"] = roundf(c.powerFactor * 100) / 100;
+  o["energy"] = c.energy;
+}
+
+void publishSensors() {
   Electrical e = readElectrical();
 
-#if SIMULATION
-  // Integrate energy (the PZEM does this itself on real hardware).
-  if (lastEnergyUpdateMs != 0) {
-    energyKwh += e.power * (now - lastEnergyUpdateMs) / 3600000000.0;
-  }
-  lastEnergyUpdateMs = now;
-#endif
-
-  if (e.valid) {
+  if (e.lights.valid || e.fans.valid || e.hasMain) {
     JsonDocument doc;
     doc["node_id"] = NODE_ID;
     doc["device_name"] = NODE_DEVICE_NAME;
     doc["voltage"] = roundf(e.voltage * 10) / 10;
-    doc["current"] = roundf(e.current * 1000) / 1000;
-    doc["power"] = roundf(e.power * 10) / 10;
-    doc["power_factor"] = roundf(e.powerFactor * 100) / 100;
-    doc["energy"] = energyKwh;
-    doc["fan_current"] = roundf(e.fanCurrent * 1000) / 1000;
+
+    JsonObject circuits = doc["circuits"].to<JsonObject>();
+    if (e.hasMain) addCircuit(circuits, "MAIN", e.main);
+    addCircuit(circuits, "LIGHTS", e.lights);
+    addCircuit(circuits, "FANS", e.fans);
+
     publishJson(SENSOR_TOPIC, doc);
   } else {
-    Serial.println("[sensor] PZEM not responding, electrical reading skipped");
+    Serial.println("[sensor] no meter responding, electrical reading skipped");
   }
 
   TempAndHumidity climate = dht.getTempAndHumidity();
@@ -344,19 +397,10 @@ void publishSensors() {
     Serial.println("[sensor] DHT read failed, environment reading skipped");
   }
 
-  {
-    JsonDocument doc;
-    doc["node_id"] = NODE_ID;
-    doc["device_name"] = NODE_DEVICE_NAME;
-    doc["light_state"] = lampBranchCurrent(e) > LIGHT_ON_CURRENT_A ? "ON" : "OFF";
-    publishJson(SENSOR_TOPIC, doc);
-  }
-
   Serial.printf(
-    "[sensor] V=%.1f I=%.3f fan=%.3f P=%.1f lamp=%s fanRelay=%s T=%.1f H=%.1f light=%d%%\n",
-    e.voltage, e.current, e.fanCurrent, e.power,
-    lampOn ? "ON" : "off", fanOn ? "ON" : "off",
-    climate.temperature, climate.humidity, readLightLevel());
+    "[sensor] V=%.1f lights=%.2fA fans=%.2fA main=%.2fA T=%.1f H=%.1f\n",
+    e.voltage, e.lights.current, e.fans.current, e.main.current,
+    climate.temperature, climate.humidity);
 }
 
 
@@ -381,6 +425,14 @@ const char *boardState(float inkRatio) {
   return "DIRTY";
 }
 
+int peopleCount() {
+  return (int)roundf(adcFraction(PIN_POT_PEOPLE) * MAX_PEOPLE);
+}
+
+float boardInk() {
+  return roundf(adcFraction(PIN_POT_BOARD_INK) * MAX_BOARD_INK * 1000) / 1000;
+}
+
 void publishVision() {
   bool offline = switchActive(PIN_CAMERA_OFFLINE);
 
@@ -399,29 +451,47 @@ void publishVision() {
     cameraWasOffline = false;
   }
 
-  int people = (int)roundf(adcFraction(PIN_POT_PEOPLE) * MAX_PEOPLE);
-  bool blocked = switchActive(PIN_FAN_BLOCKED);
-  bool personAtBoard = switchActive(PIN_PERSON_AT_BOARD);
-  float ink = roundf(adcFraction(PIN_POT_BOARD_INK) * MAX_BOARD_INK * 1000) / 1000;
-
   {
     JsonDocument doc;
     doc["node_id"] = CAMERA_ID;
     doc["device_name"] = CAMERA_DEVICE_NAME;
-    doc["occupancy_count"] = people;
+    doc["occupancy_count"] = peopleCount();
     publishJson(VISION_TOPIC, doc);
   }
 
-  bool running = fanOn && !blocked;
-
+  // One message for every fan: rotation seen in each fan's region.
   {
     JsonDocument doc;
     doc["node_id"] = CAMERA_ID;
-    doc["device_name"] = FAN_DEVICE_NAME;
-    JsonObject motion = doc["fan_motion"].to<JsonObject>();
-    motion["running"] = running;
-    motion["motion_score"] = running ? 0.3 : 0.0;
-    motion["confidence"] = 0.95;
+    JsonArray fans = doc["fans"].to<JsonArray>();
+
+    for (int n = 1; n <= FAN_COUNT; n++) {
+      JsonObject fan = fans.add<JsonObject>();
+      bool rotating = fanRotating(n);
+      fan["device_name"] = String(FAN_NAME_PREFIX) + n;
+      fan["running"] = rotating;
+      fan["motion_score"] = rotating ? 0.3 : 0.0;
+      fan["confidence"] = 0.95;
+    }
+
+    publishJson(VISION_TOPIC, doc);
+  }
+
+  // One message for every tube light: brightness in each tube's region.
+  {
+    JsonDocument doc;
+    doc["node_id"] = CAMERA_ID;
+    JsonArray lights = doc["lights"].to<JsonArray>();
+
+    for (int n = 1; n <= TUBE_COUNT; n++) {
+      JsonObject tube = lights.add<JsonObject>();
+      bool lit = tubeLit(n);
+      tube["device_name"] = String(TUBE_NAME_PREFIX) + n;
+      tube["lit"] = lit;
+      tube["brightness"] = lit ? 0.9 : 0.1;
+      tube["confidence"] = 0.95;
+    }
+
     publishJson(VISION_TOPIC, doc);
   }
 
@@ -431,11 +501,12 @@ void publishVision() {
     doc["device_name"] = CAMERA_DEVICE_NAME;
     JsonObject board = doc["board"].to<JsonObject>();
 
-    if (personAtBoard) {
+    if (switchActive(PIN_PERSON_AT_BOARD)) {
       board["state"] = "OCCLUDED";
       board["ink_ratio"] = nullptr;
       board["confidence"] = 0.0;
     } else {
+      float ink = boardInk();
       board["state"] = boardState(ink);
       board["ink_ratio"] = ink;
       board["confidence"] = 0.95;
@@ -445,12 +516,73 @@ void publishVision() {
   }
 
   Serial.printf(
-    "[camera] people=%d fan=%s board=%s ink=%.2f\n",
-    people, running ? "rotating" : "stopped",
-    personAtBoard ? "OCCLUDED" : boardState(ink), ink);
+    "[camera] people=%d fans %d/%d on (blocked %d) tubes %d/%d on (failed %d)\n",
+    peopleCount(), fansSwitchedOn(), FAN_COUNT, blockedFan,
+    tubesSwitchedOn(), TUBE_COUNT, failedTube);
 }
 
 #endif
+
+
+// ---------------------------------------------------------
+// OLED status display
+// ---------------------------------------------------------
+
+// One box per unit: filled = working, outline = off,
+// cross = powered but faulty (blocked fan / failed tube).
+void drawUnits(int y, const char *label, int count, bool (*powered)(int), bool (*working)(int)) {
+  display.setCursor(0, y);
+  display.print(label);
+
+  for (int n = 1; n <= count; n++) {
+    int x = 44 + (n - 1) * 14;
+
+    if (working(n)) {
+      display.fillRect(x, y, 10, 8, SSD1306_WHITE);
+    } else if (powered(n)) {
+      display.drawRect(x, y, 10, 8, SSD1306_WHITE);
+      display.drawLine(x, y, x + 9, y + 7, SSD1306_WHITE);
+      display.drawLine(x + 9, y, x, y + 7, SSD1306_WHITE);
+    } else {
+      display.drawRect(x, y, 10, 8, SSD1306_WHITE);
+    }
+  }
+}
+
+void updateDisplay() {
+  if (!displayReady) {
+    return;
+  }
+
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+
+  display.setCursor(0, 0);
+  display.printf("%s %s", ROOM_NAME, mqtt.connected() ? "online" : "offline");
+
+#if SIMULATION
+  display.setCursor(86, 0);
+  display.printf("%3.0fV", 180.0f + adcFraction(PIN_POT_VOLTAGE) * 80.0f);
+
+  drawUnits(14, "Fans", FAN_COUNT, fanPowered, fanRotating);
+  drawUnits(26, "Tubes", TUBE_COUNT, tubePowered, tubeLit);
+
+  display.setCursor(0, 40);
+  display.printf("People %2d  Board %2.0f%%", peopleCount(), boardInk() * 100);
+
+  display.setCursor(0, 52);
+  display.printf("Relay L:%s F:%s%s",
+                 lightsRelayOn ? "on" : "off",
+                 fansRelayOn ? "on" : "off",
+                 switchActive(PIN_FANS_OVERLOAD) ? " OVL" : "");
+#else
+  display.setCursor(0, 20);
+  display.printf("Relay L:%s F:%s", lightsRelayOn ? "on" : "off", fansRelayOn ? "on" : "off");
+#endif
+
+  display.display();
+}
 
 
 // ---------------------------------------------------------
@@ -563,13 +695,13 @@ void setup() {
                 SIMULATION ? "SIMULATION" : "HARDWARE");
   Serial.printf("Topics: %s/...\n", baseTopic().c_str());
 
-  pinMode(PIN_LAMP_RELAY, OUTPUT);
-  pinMode(PIN_FAN_RELAY, OUTPUT);
+  pinMode(PIN_LIGHTS_RELAY, OUTPUT);
+  pinMode(PIN_FANS_RELAY, OUTPUT);
   pinMode(PIN_MQTT_LED, OUTPUT);
 
-  pinMode(PIN_LAMP_BUTTON, INPUT_PULLUP);
-  pinMode(PIN_FAN_BUTTON, INPUT_PULLUP);
-  pinMode(PIN_FAN_BLOCKED, INPUT_PULLUP);
+  pinMode(PIN_BTN_FAN_FAULT, INPUT_PULLUP);
+  pinMode(PIN_BTN_TUBE_FAULT, INPUT_PULLUP);
+  pinMode(PIN_FANS_OVERLOAD, INPUT_PULLUP);
   pinMode(PIN_PERSON_AT_BOARD, INPUT_PULLUP);
   pinMode(PIN_CAMERA_OFFLINE, INPUT_PULLUP);
 
@@ -577,11 +709,20 @@ void setup() {
 
   applyRelays();
 
+  Wire.begin(PIN_I2C_SDA, PIN_I2C_SCL);
+  displayReady = display.begin(SSD1306_SWITCHCAPVCC, OLED_ADDRESS);
+
+  if (!displayReady) {
+    Serial.println("[display] SSD1306 not found, continuing without it");
+  }
+
 #if SIMULATION
   dht.setup(PIN_DHT, DHTesp::DHT22);
 #else
   dht.setup(PIN_DHT, DHTesp::DHT11);
 #endif
+
+  updateDisplay();
 
   connectWifi();
 
@@ -591,7 +732,7 @@ void setup() {
 
   mqtt.setServer(MQTT_HOST, MQTT_PORT);
   mqtt.setCallback(onMqttMessage);
-  mqtt.setBufferSize(512);
+  mqtt.setBufferSize(1024);
   mqtt.setKeepAlive(MQTT_KEEPALIVE_S);
 }
 
@@ -610,20 +751,32 @@ void loop() {
 
   digitalWrite(PIN_MQTT_LED, mqtt.connected() ? HIGH : LOW);
 
-  // Wall switches toggle the relays locally.
-  if (buttonPressed(lampButton)) {
-    setRelay("LAMP", !lampOn, "wall switch");
+#if SIMULATION
+  // Fault injection: each press moves the fault to the next unit
+  // (none -> 1 -> 2 ... -> 6 -> none).
+  if (buttonPressed(fanFaultButton)) {
+    blockedFan = (blockedFan + 1) % (FAN_COUNT + 1);
+    Serial.printf("[fault] blocked fan: %d\n", blockedFan);
+    reportNow = true;
   }
 
-  if (buttonPressed(fanButton)) {
-    setRelay("FAN", !fanOn, "wall switch");
+  if (buttonPressed(tubeFaultButton)) {
+    failedTube = (failedTube + 1) % (TUBE_COUNT + 1);
+    Serial.printf("[fault] failed tube: %d\n", failedTube);
+    reportNow = true;
+  }
+#endif
+
+  unsigned long now = millis();
+
+  if (now - lastDisplayMs >= DISPLAY_INTERVAL_MS) {
+    lastDisplayMs = now;
+    updateDisplay();
   }
 
   if (!mqtt.connected()) {
     return;
   }
-
-  unsigned long now = millis();
 
   if (reportNow) {
     reportNow = false;

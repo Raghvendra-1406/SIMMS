@@ -111,6 +111,8 @@ class VisionPublisher:
             "occupancy": {"person_count": 3, "total_seats": 40, ...},
             "fans": [{"device_id": 10, "running": False,
                       "motion_score": 0.01, "confidence": 0.91}],
+            "lights": [{"device_id": 20, "lit": True,
+                        "brightness": 0.9, "confidence": 1.0}],
             "board": {"state": "DIRTY", "ink_ratio": 0.31,
                       "confidence": 1.0} or None
         }
@@ -162,21 +164,23 @@ class VisionPublisher:
                 "board": board,
             })
 
-        for fan in vision_result.get("fans", []):
-            device_id = fan.get("device_id")
+        # One message per unit kind, covering every fan / tube light
+        # (the backend compares them with the circuit current).
+        fans = [
+            fan for fan in vision_result.get("fans", [])
+            if fan.get("device_id") is not None
+        ]
 
-            if device_id is None:
-                continue
+        if fans:
+            self._publish(topic, {**common, "fans": fans})
 
-            self._publish(topic, {
-                **common,
-                "device_id": device_id,
-                "fan_motion": {
-                    "running": fan.get("running"),
-                    "motion_score": fan.get("motion_score"),
-                    "confidence": fan.get("confidence"),
-                },
-            })
+        lights = [
+            light for light in vision_result.get("lights", [])
+            if light.get("device_id") is not None
+        ]
+
+        if lights:
+            self._publish(topic, {**common, "lights": lights})
 
     def _publish(self, topic, payload, retain=False):
         message = json.dumps(payload)

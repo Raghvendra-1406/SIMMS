@@ -17,6 +17,7 @@ ALLOWED_OBSERVATION_TYPES = {
     "OCCUPANCY",
     "FAN_MOTION",
     "BOARD",
+    "LIGHT",
 }
 
 BOARD_STATES = {
@@ -31,7 +32,7 @@ def validate_observation_type(observation_type):
     if observation_type not in ALLOWED_OBSERVATION_TYPES:
         raise ValueError(
             "Invalid observation type. Allowed values are "
-            "OCCUPANCY, FAN_MOTION and BOARD."
+            "OCCUPANCY, FAN_MOTION, BOARD and LIGHT."
         )
 
 
@@ -134,6 +135,12 @@ def validate_observation_data(
 
     elif observation_type == "BOARD":
         validate_board_data(observation_data)
+
+    elif observation_type == "LIGHT":
+        if not isinstance(observation_data.get("light"), dict):
+            raise ValueError(
+                "Light observation must contain a light object."
+            )
 
 
 def create_observation(
