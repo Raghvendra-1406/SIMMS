@@ -206,6 +206,27 @@ DEVICE_OFFLINE_FAULT_MINUTES = float(os.getenv("DEVICE_OFFLINE_FAULT_MINUTES", "
 
 
 # ---------------------------------------------------------
+# ENERGY REPORT (Plan v2 C5: energy wasted in empty rooms)
+#
+# Tariff and grid emission factor turn kWh into money and CO2.
+# Defaults: a typical Indian institutional tariff and the CEA grid
+# emission factor (~0.71 kg CO2 / kWh); set your own in .env.
+# ---------------------------------------------------------
+
+TARIFF_PER_KWH = float(os.getenv("TARIFF_PER_KWH", "8.0"))
+CURRENCY_SYMBOL = os.getenv("CURRENCY_SYMBOL", "₹")
+GRID_EMISSION_KG_PER_KWH = float(os.getenv("GRID_EMISSION_KG_PER_KWH", "0.71"))
+
+# Meter readings further apart than this are a gap (node offline):
+# the time between them is not integrated, it is reported as unknown.
+ENERGY_MAX_GAP_SECONDS = int(os.getenv("ENERGY_MAX_GAP_SECONDS", "120"))
+
+# An occupancy count older than this no longer tells whether the room
+# is in use (camera offline): that energy counts as unknown.
+OCCUPANCY_MAX_AGE_MINUTES = float(os.getenv("OCCUPANCY_MAX_AGE_MINUTES", "5"))
+
+
+# ---------------------------------------------------------
 # WEB PUSH (Plan v2 C8, T16)
 #
 # Generate a key pair once with:  python -m scripts.generate_vapid_keys

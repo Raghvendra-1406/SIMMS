@@ -15,6 +15,7 @@ import {
 import { apiFetch } from "../../lib/api";
 import { navigateTo } from "../../lib/session";
 import { usePolling } from "../../lib/usePolling";
+import EnergyReport from "../../components/EnergyReport";
 
 // Plan v2 §16.2 evaluation numbers: false ticket rate, detection and
 // notification latency, repair times and data completeness.
@@ -332,6 +333,8 @@ export default function SupervisorStatistics() {
   const [rooms, setRooms] = useState([]);
 
   const [stats, setStats] = useState(null);
+  const [energy, setEnergy] = useState(null);
+  const [energyLoading, setEnergyLoading] = useState(true);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
@@ -344,8 +347,17 @@ export default function SupervisorStatistics() {
     async ({ silent = false, nextQuery } = {}) => {
       if (!silent) setRefreshing(true);
 
+      const params = nextQuery ?? query;
+
+      // The energy report is slower: it fills in when ready.
+      if (!silent) setEnergyLoading(true);
+      apiFetch(`/stats/energy?${params}`)
+        .then(setEnergy)
+        .catch(() => setEnergy(null))
+        .finally(() => setEnergyLoading(false));
+
       try {
-        const data = await apiFetch(`/stats/overview?${nextQuery ?? query}`);
+        const data = await apiFetch(`/stats/overview?${params}`);
         setStats(data);
         setError("");
       } catch (err) {
@@ -673,6 +685,14 @@ export default function SupervisorStatistics() {
                 ))}
               </ul>
             </Card>
+          </div>
+
+          <div>
+            <h3 className="mb-3 flex items-center gap-2 text-base font-semibold text-slate-900">
+              <Icon name="zap" className="h-4 w-4 text-slate-500" />
+              Energy wasted in empty rooms
+            </h3>
+            <EnergyReport energy={energy} loading={energyLoading} />
           </div>
 
           <ReviewQueue
