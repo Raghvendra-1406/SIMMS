@@ -6,6 +6,7 @@ export const CATEGORY_LABELS = {
   ELECTRICAL: "Electrical",
   CLEANING: "Cleaning",
   ENERGY: "Energy",
+  INFRASTRUCTURE: "Infrastructure",
 };
 
 export const TEAM_LABELS = {

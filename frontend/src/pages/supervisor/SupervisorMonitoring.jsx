@@ -32,6 +32,7 @@ const FAULT_LABELS = {
   LIGHTS_LEFT_ON: "Lights left on",
   ELECTRICAL_ABNORMALITY: "Electrical abnormality",
   BOARD_NEEDS_CLEANING: "Board needs cleaning",
+  DEVICE_OFFLINE: "Device offline",
 };
 
 const BOARD_TONES = {

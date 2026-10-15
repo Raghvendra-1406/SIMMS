@@ -22,6 +22,10 @@ from services.routing_service import (
     check_sla_breaches,
 )
 
+from services.device_health_service import (
+    check_offline_devices,
+)
+
 
 # Staleness is checked more often than health is computed, so a
 # silent node shows OFFLINE soon after NODE_OFFLINE_SECONDS.
@@ -57,6 +61,9 @@ def check_stale_nodes():
             f"Node {node[2]} (room {node[1]}) marked OFFLINE: "
             f"nothing heard for {NODE_OFFLINE_SECONDS} s."
         )
+
+    for action, node_id in check_offline_devices():
+        log(f"Device offline check: {action} for node {node_id}.")
 
 
 def escalate_sla_breaches():

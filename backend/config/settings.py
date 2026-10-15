@@ -191,6 +191,21 @@ SLA_CHECK_INTERVAL_SECONDS = int(os.getenv("SLA_CHECK_INTERVAL_SECONDS", "60"))
 
 
 # ---------------------------------------------------------
+# BUFFERED READINGS (Plan v2 §16 T12)
+#
+# Nodes keep readings while offline and replay them on reconnect.
+# A reading older than this is stored (history, completeness) but
+# does not vote in fault confirmation: stale data must not raise or
+# clear tickets after the fact.
+# ---------------------------------------------------------
+
+LIVE_READING_MAX_AGE_SECONDS = int(os.getenv("LIVE_READING_MAX_AGE_SECONDS", "90"))
+
+# A sensor node or camera offline this long raises DEVICE_OFFLINE.
+DEVICE_OFFLINE_FAULT_MINUTES = float(os.getenv("DEVICE_OFFLINE_FAULT_MINUTES", "5"))
+
+
+# ---------------------------------------------------------
 # DEPLOYMENT
 # ---------------------------------------------------------
 

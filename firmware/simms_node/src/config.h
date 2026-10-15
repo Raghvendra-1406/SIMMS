@@ -96,7 +96,7 @@
 #define FAN_COUNT 6
 #define TUBE_COUNT 6
 
-#define FW_VERSION "2.0.0"
+#define FW_VERSION "2.1.0"
 
 
 // ---------------------------------------------------------
@@ -113,6 +113,17 @@
 // MQTT keep-alive: the broker publishes the last-will OFFLINE
 // message ~1.5x this long after the node disappears.
 #define MQTT_KEEPALIVE_S 15
+
+// Offline buffering (Plan v2 §16 T12): while Wi-Fi or the broker is
+// down, sensor readings are kept in RAM and replayed oldest-first on
+// reconnect. 2 messages per 10 s cycle -> 200 slots ~ 16 minutes.
+// When full, the oldest reading is dropped.
+#define BUFFER_CAPACITY 200
+#define BUFFER_FLUSH_PER_LOOP 5
+
+// How often to retry Wi-Fi while disconnected (sampling continues).
+#define WIFI_RETRY_MS 5000
+#define WIFI_BOOT_TIMEOUT_MS 20000
 
 
 // ---------------------------------------------------------

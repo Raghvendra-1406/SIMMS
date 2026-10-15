@@ -39,6 +39,9 @@ def main():
 
         publisher.connect()
 
+        if not publisher.wait_until_connected():
+            raise SystemExit("Broker not reachable.")
+
         publisher.publish_status(True)
 
         publisher.publish_vision_result(

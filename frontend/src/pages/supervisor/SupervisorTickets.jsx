@@ -54,6 +54,7 @@ function getFaultTypeLabel(faultType) {
     BOARD_NEEDS_CLEANING: "Board needs cleaning",
     ELECTRICAL_ABNORMALITY:
       "Electrical abnormality",
+    DEVICE_OFFLINE: "Device offline",
   };
 
   return (

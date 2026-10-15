@@ -342,6 +342,12 @@ class VisionRuntime:
 
                 self.publisher.publish_vision_result(result)
 
+                if self.publisher.buffered_count:
+                    print(
+                        f"Broker unreachable: "
+                        f"{self.publisher.buffered_count} observations buffered."
+                    )
+
                 self.publisher.publish_status(
                     True,
                     source=self.camera.kind,

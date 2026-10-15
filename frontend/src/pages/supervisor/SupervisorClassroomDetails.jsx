@@ -44,6 +44,7 @@ function getFaultTypeLabel(faultType) {
     LIGHTS_LEFT_ON: "Lights left on",
     BOARD_NEEDS_CLEANING: "Board needs cleaning",
     ELECTRICAL_ABNORMALITY: "Electrical abnormality",
+    DEVICE_OFFLINE: "Device offline",
   };
 
   return labels[faultType] || String(faultType || "Unknown").replaceAll("_", " ");

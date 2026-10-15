@@ -297,6 +297,9 @@ function MaintenanceTickets() {
             case "ELECTRICAL_ABNORMALITY":
                 return "Electrical Abnormality";
 
+            case "DEVICE_OFFLINE":
+                return "Device Offline";
+
             default:
                 return faultType.replaceAll("_", " ");
         }
