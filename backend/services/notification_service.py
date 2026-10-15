@@ -7,6 +7,10 @@ from database.repositories.notification_repository import (
     mark_all_notifications_as_read,
 )
 
+from services.push_service import (
+    queue_push,
+)
+
 
 def create_system_notification(
     user_id,
@@ -27,12 +31,22 @@ def create_system_notification(
             "Notification message is required."
         )
 
-    return create_notification(
+    notification = create_notification(
         user_id=user_id,
         notification_type=notification_type,
         message=message.strip(),
         ticket_id=ticket_id
     )
+
+    # Same event as a Web Push to the user's phone / browser (C8).
+    queue_push(
+        user_id=user_id,
+        notification_type=notification_type,
+        message=message.strip(),
+        ticket_id=ticket_id
+    )
+
+    return notification
 
 
 def get_user_notifications(user_id):

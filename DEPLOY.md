@@ -45,6 +45,7 @@ psql "<DATABASE_URL>" -f backend/database/migrations/003_circuit_monitoring.sql
 psql "<DATABASE_URL>" -f backend/database/migrations/004_calibration_images.sql
 psql "<DATABASE_URL>" -f backend/database/migrations/005_ticket_reviews.sql
 psql "<DATABASE_URL>" -f backend/database/migrations/006_ticket_routing.sql
+psql "<DATABASE_URL>" -f backend/database/migrations/007_push_subscriptions.sql
 ```
 
 For a brand-new database, run `backend/database/schema.sql` instead.
@@ -62,6 +63,8 @@ For a brand-new database, run `backend/database/schema.sql` instead.
    | `MQTT_USERNAME` / `MQTT_PASSWORD` | HiveMQ credentials |
    | `CORS_ORIGINS` | Your Vercel URL, e.g. `https://simms-frontend.vercel.app` (add more, comma separated) |
    | `CORS_ORIGIN_REGEX` | Optional, for PR previews: `https://simms-frontend-.*\.vercel\.app` |
+   | `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | Phone notifications. Run `python -m scripts.generate_vapid_keys` once and paste both. Use the same pair as your local `.env` or not, but never change them casually: every phone would have to re-enable notifications. |
+   | `VAPID_SUBJECT` | A contact for the push services, e.g. `mailto:you@example.com` |
 
    `JWT_SECRET_KEY` is generated automatically. The detection settings default to the plan's values. For quick demos, set `VACANCY_MINUTES=1` and `COOLDOWN_MINUTES=2`.
 4. After the first deploy, open `https://<service>.onrender.com/health`. It should return `{"status":"healthy"}`.

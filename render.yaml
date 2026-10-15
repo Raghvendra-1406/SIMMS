@@ -55,6 +55,15 @@ services:
       - key: CORS_ORIGIN_REGEX
         sync: false
 
+      # Web Push (phone notifications). Generate once with
+      # python -m scripts.generate_vapid_keys
+      - key: VAPID_PUBLIC_KEY
+        sync: false
+      - key: VAPID_PRIVATE_KEY
+        sync: false
+      - key: VAPID_SUBJECT
+        sync: false            # e.g. mailto:you@example.com
+
       # Detection rules (Plan v2 defaults; use 1 / 2 for quick dry runs)
       - key: VACANCY_MINUTES
         value: "10"

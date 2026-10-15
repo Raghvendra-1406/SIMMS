@@ -206,6 +206,19 @@ DEVICE_OFFLINE_FAULT_MINUTES = float(os.getenv("DEVICE_OFFLINE_FAULT_MINUTES", "
 
 
 # ---------------------------------------------------------
+# WEB PUSH (Plan v2 C8, T16)
+#
+# Generate a key pair once with:  python -m scripts.generate_vapid_keys
+# Empty keys disable push (in-app notifications still work).
+# VAPID_SUBJECT is a contact for the push services (mailto: or https:).
+# ---------------------------------------------------------
+
+VAPID_PUBLIC_KEY = os.getenv("VAPID_PUBLIC_KEY", "").strip()
+VAPID_PRIVATE_KEY = os.getenv("VAPID_PRIVATE_KEY", "").strip()
+VAPID_SUBJECT = os.getenv("VAPID_SUBJECT", "mailto:admin@simms.local").strip()
+
+
+# ---------------------------------------------------------
 # DEPLOYMENT
 # ---------------------------------------------------------
 

@@ -175,6 +175,23 @@ CREATE TABLE node_status (
 
 
 -- Calibration reference images (kept in the database: ephemeral disks).
+-- Web Push: one row per browser / installed app (Plan v2 C8, T16).
+CREATE TABLE push_subscriptions (
+    subscription_id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL
+        REFERENCES users(user_id) ON DELETE CASCADE,
+    endpoint TEXT NOT NULL UNIQUE,
+    p256dh TEXT NOT NULL,
+    auth TEXT NOT NULL,
+    user_agent TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    last_success_at TIMESTAMPTZ,
+    last_error TEXT
+);
+
+CREATE INDEX idx_push_subscriptions_user
+    ON push_subscriptions (user_id);
+
 -- Human verdict per ticket, for the false ticket rate (Plan v2 §16.2).
 CREATE TABLE ticket_reviews (
     ticket_id INTEGER PRIMARY KEY
