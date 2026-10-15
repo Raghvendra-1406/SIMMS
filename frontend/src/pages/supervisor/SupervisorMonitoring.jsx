@@ -13,6 +13,7 @@ import {
 } from "../../components/ui";
 import { apiFetch } from "../../lib/api";
 import { usePolling } from "../../lib/usePolling";
+import { healthSummaryText } from "../../lib/health";
 
 // Live monitor: the latest state of every classroom, refreshed every
 // few seconds from GET /live/rooms, with demo-panel relay controls.
@@ -271,7 +272,11 @@ function RoomCard({ room, ageOf, canControl, pendingCommands, onCommand }) {
           {room.active_faults.length > 0 && (
             <StatusBadge tone="danger" label={`${room.active_faults.length} active fault${room.active_faults.length === 1 ? "" : "s"}`} />
           )}
-          {health && <StatusBadge status={health.health_status} label={`${formatLabel(health.health_status)} · ${formatNumber(health.health_score, 0)}`} />}
+          {health && (
+            <span title={healthSummaryText(health.components)}>
+              <StatusBadge status={health.health_status} label={`${formatLabel(health.health_status)} · ${formatNumber(health.health_score, 0)}`} />
+            </span>
+          )}
         </div>
       }
       bodyClassName="card-body space-y-4"

@@ -131,6 +131,31 @@ NODE_OFFLINE_SECONDS = int(
     )
 )
 
+# Classroom Infrastructure Health Score (Plan v2 §10):
+#   CIHS = 100 - sum(weight x penalty), each penalty 0-100.
+# The plan's furniture term is not built (no furniture detection);
+# its weight goes to monitoring coverage (node / camera online).
+# Weights should add up to 1; tune them with the maintenance staff.
+def _parse_weights(text):
+    weights = {}
+
+    for part in text.split(","):
+        if "=" in part:
+            name, value = part.split("=", 1)
+            weights[name.strip()] = float(value)
+
+    return weights
+
+
+HEALTH_WEIGHTS = _parse_weights(os.getenv(
+    "HEALTH_WEIGHTS",
+    "electrical=0.40,monitoring=0.20,board=0.15,maintenance=0.25"
+))
+
+# Plan v2 §10 bands: >= NORMAL_MIN normal, >= WARNING_MIN warning.
+HEALTH_NORMAL_MIN = float(os.getenv("HEALTH_NORMAL_MIN", "85"))
+HEALTH_WARNING_MIN = float(os.getenv("HEALTH_WARNING_MIN", "60"))
+
 # How often classroom health scores are recalculated.
 HEALTH_INTERVAL_SECONDS = int(
     os.getenv(

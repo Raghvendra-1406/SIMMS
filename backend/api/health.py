@@ -32,6 +32,8 @@ def get_classroom_health():
                 "humidity": health[7],
                 "power": health[8],
                 "calculated_at": health[9],
+                # CIHS breakdown (Plan v2 §10); None for older rows
+                "components": health[10],
             }
             for health in health_scores
         ]

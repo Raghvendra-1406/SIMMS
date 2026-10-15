@@ -46,6 +46,7 @@ psql "<DATABASE_URL>" -f backend/database/migrations/004_calibration_images.sql
 psql "<DATABASE_URL>" -f backend/database/migrations/005_ticket_reviews.sql
 psql "<DATABASE_URL>" -f backend/database/migrations/006_ticket_routing.sql
 psql "<DATABASE_URL>" -f backend/database/migrations/007_push_subscriptions.sql
+psql "<DATABASE_URL>" -f backend/database/migrations/008_health_components.sql
 ```
 
 For a brand-new database, run `backend/database/schema.sql` instead.

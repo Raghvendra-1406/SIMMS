@@ -15,6 +15,7 @@ import {
 import { formatLabel } from "../../lib/format";
 import { navigateTo } from "../../lib/session";
 import { usePolling } from "../../lib/usePolling";
+import HealthBreakdown from "../../components/HealthBreakdown";
 
 // Backend URL: VITE_API_BASE_URL at build time (see lib/api.js).
 import { API_BASE_URL } from "../../lib/api";
@@ -382,7 +383,14 @@ export default function SupervisorClassroomDetails() {
                       ? "warning"
                       : "success"
               }
-              footer={health && health.health_score != null ? <ScoreBar value={health.health_score} /> : null}
+              footer={
+                health && health.health_score != null ? (
+                  <div className="space-y-3">
+                    <ScoreBar value={health.health_score} />
+                    <HealthBreakdown components={health.components} />
+                  </div>
+                ) : null
+              }
             />
             <StatCard
               unavailable={loadFailed}

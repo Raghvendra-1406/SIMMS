@@ -138,6 +138,8 @@ CREATE TABLE health_scores (
     temperature DECIMAL(5,2),
     humidity DECIMAL(5,2),
     power DECIMAL(10,2),
+    -- CIHS breakdown: penalty and weight per component (Plan v2 §10)
+    components JSONB,
     calculated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 

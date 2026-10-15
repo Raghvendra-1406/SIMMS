@@ -1,3 +1,5 @@
+from psycopg2.extras import Json
+
 from database.connection import get_connection
 
 
@@ -9,7 +11,8 @@ def create_health_score(
     occupancy_count=0,
     temperature=None,
     humidity=None,
-    power=None
+    power=None,
+    components=None
 ):
     conn = get_connection()
     cursor = conn.cursor()
@@ -24,9 +27,10 @@ def create_health_score(
                 occupancy_count,
                 temperature,
                 humidity,
-                power
+                power,
+                components
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING
                 health_id,
                 room_id,
@@ -46,7 +50,8 @@ def create_health_score(
             occupancy_count,
             temperature,
             humidity,
-            power
+            power,
+            Json(components) if components is not None else None
         ))
 
         health = cursor.fetchone()
@@ -167,12 +172,75 @@ def get_all_latest_health_scores():
                 temperature,
                 humidity,
                 power,
-                calculated_at
+                calculated_at,
+                components
             FROM health_scores
             ORDER BY room_id, calculated_at DESC, health_id DESC
         """)
 
         return cursor.fetchall()
+
+    finally:
+        cursor.close()
+        conn.close()
+
+
+# Everything the CIHS needs for one room in one round trip.
+HEALTH_INPUTS_SQL = """
+SELECT json_build_object(
+    'fans_total', (
+        SELECT COUNT(*) FROM devices
+        WHERE room_id = %(room_id)s AND device_type = 'FAN'
+    ),
+    'lights_total', (
+        SELECT COUNT(*) FROM devices
+        WHERE room_id = %(room_id)s AND device_type = 'LIGHT'
+    ),
+    'faults', COALESCE((
+        SELECT json_agg(json_build_object(
+            'fault_type', fault_type,
+            'device_id', device_id,
+            'detected_at', detected_at
+        ))
+        FROM fault_events
+        WHERE room_id = %(room_id)s
+          AND status IN ('OPEN', 'REOPENED')
+    ), '[]'::json),
+    'tickets', COALESCE((
+        SELECT json_agg(json_build_object(
+            'ticket_id', t.ticket_id,
+            'priority', t.priority,
+            'status', t.status,
+            'created_at', t.created_at,
+            'sla_due_at', t.sla_due_at,
+            'started_at', t.started_at
+        ))
+        FROM tickets t
+        JOIN fault_events f ON f.fault_id = t.fault_id
+        WHERE f.room_id = %(room_id)s
+          AND t.status IN ('OPEN', 'REOPENED', 'RESOLVED')
+    ), '[]'::json),
+    'nodes', COALESCE((
+        SELECT json_agg(json_build_object(
+            'node_id', node_id,
+            'kind', kind,
+            'state', state
+        ))
+        FROM node_status
+        WHERE room_id = %(room_id)s
+    ), '[]'::json)
+)
+"""
+
+
+def get_room_health_inputs(room_id):
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute(HEALTH_INPUTS_SQL, {"room_id": room_id})
+
+        return cursor.fetchone()[0]
 
     finally:
         cursor.close()
