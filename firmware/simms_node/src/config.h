@@ -41,27 +41,43 @@
 #define MQTT_HOST "host.wokwi.internal"
 
 #else
-#define WIFI_SSID "your-wifi-name"
-#define WIFI_PASSWORD "your-wifi-password"
-#define WIFI_CHANNEL 0
-
-// LAN IP address of the PC running Mosquitto.
-#define MQTT_HOST "192.168.1.10"
+// Real hardware: Wi-Fi and broker come from src/secrets.h, which git
+// ignores so passwords never reach the repo. Create it once:
+//     copy src\secrets.example.h src\secrets.h   (then edit it)
+#if __has_include("secrets.h")
+#include "secrets.h"
+#else
+#error "Create src/secrets.h from src/secrets.example.h (Wi-Fi + broker IP)"
 #endif
 
+#ifndef WIFI_CHANNEL
+#define WIFI_CHANNEL 0
+#endif
+#endif
+
+#ifndef MQTT_PORT
 #define MQTT_PORT 1883
+#endif
 
 // Hosted broker (e.g. HiveMQ Cloud free tier): set MQTT_HOST to the
 // cluster URL (xxxx.s1.eu.hivemq.cloud), MQTT_PORT 8883, MQTT_USE_TLS 1
 // and the credentials created in the HiveMQ console. The same values go
 // in the backend's MQTT_* settings. Local Mosquitto: leave TLS off and
 // the credentials empty.
+#ifndef MQTT_USE_TLS
 #define MQTT_USE_TLS 0
+#endif
+#ifndef MQTT_USERNAME
 #define MQTT_USERNAME ""
+#endif
+#ifndef MQTT_PASSWORD
 #define MQTT_PASSWORD ""
+#endif
 
 // Must match MQTT_TOPIC_PREFIX in backend/.env ("" = none).
+#ifndef TOPIC_PREFIX
 #define TOPIC_PREFIX ""
+#endif
 
 
 // ---------------------------------------------------------
