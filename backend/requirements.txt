@@ -1,9 +1,11 @@
-fastapi
-uvicorn
-psycopg2-binary
-python-jose[cryptography]
-bcrypt
-paho-mqtt
-python-dotenv
-email-validator
-python-multipart
+# Backend (API + MQTT subscriber + scheduler). Pinned to the versions
+# tested locally so cloud builds (Render) install the same thing.
+fastapi==0.141.1
+uvicorn==0.54.0
+psycopg2-binary==2.9.13
+python-jose[cryptography]==3.5.0
+bcrypt==5.0.0
+paho-mqtt==2.1.0
+python-dotenv==1.2.3
+email-validator==2.3.0
+python-multipart==0.0.32

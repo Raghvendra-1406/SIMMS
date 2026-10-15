@@ -55,6 +55,12 @@ MQTT_CLIENT_ID = os.getenv(
     "simms-backend"
 )
 
+# Hosted brokers (e.g. HiveMQ Cloud, port 8883) need TLS and a
+# username / password. Local Mosquitto needs neither.
+MQTT_USERNAME = os.getenv("MQTT_USERNAME") or None
+MQTT_PASSWORD = os.getenv("MQTT_PASSWORD") or None
+MQTT_TLS = os.getenv("MQTT_TLS", "").lower() in {"1", "true", "yes"}
+
 
 JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY")
 
@@ -132,3 +138,73 @@ HEALTH_INTERVAL_SECONDS = int(
         "60"
     )
 )
+
+
+# ---------------------------------------------------------
+# CIRCUIT MONITORING
+#
+# Electrical sensing is per circuit, not per appliance: one meter on
+# the lights circuit, one on the fans circuit, optionally one on the
+# main supply. How many units are powered is derived from circuit
+# current / per-unit current; which unit is faulty comes from the
+# camera (Plan v2 §8.5).
+# ---------------------------------------------------------
+
+# Per-unit current used until a baseline is learned for the room
+# (admin: Classroom details -> Circuits -> Learn).
+DEFAULT_FAN_CURRENT_A = float(os.getenv("DEFAULT_FAN_CURRENT_A", "0.30"))
+DEFAULT_LIGHT_CURRENT_A = float(os.getenv("DEFAULT_LIGHT_CURRENT_A", "0.10"))
+
+# A circuit is overloaded above
+#   all units x unit current x OVERLOAD_FACTOR + standby + OVERLOAD_MARGIN_A
+CIRCUIT_OVERLOAD_FACTOR = float(os.getenv("CIRCUIT_OVERLOAD_FACTOR", "1.25"))
+CIRCUIT_OVERLOAD_MARGIN_A = float(os.getenv("CIRCUIT_OVERLOAD_MARGIN_A", "0.5"))
+
+# Main supply limits (classroom breaker rating).
+MAIN_CURRENT_MAX_A = float(os.getenv("MAIN_CURRENT_MAX_A", "32"))
+
+VOLTAGE_MIN_V = float(os.getenv("VOLTAGE_MIN_V", "200"))
+VOLTAGE_MAX_V = float(os.getenv("VOLTAGE_MAX_V", "250"))
+
+# Power factor is only judged when the load is large enough to matter.
+POWER_FACTOR_MIN = float(os.getenv("POWER_FACTOR_MIN", "0.5"))
+POWER_FACTOR_MIN_CURRENT_A = float(os.getenv("POWER_FACTOR_MIN_CURRENT_A", "1.0"))
+
+
+# ---------------------------------------------------------
+# TICKET ROUTING AND SLA (Plan v2 §9)
+#
+# Response SLA per priority: staff must start work (or resolve) a
+# ticket within this many hours of it being raised or reopened.
+# HIGH and MEDIUM breaches notify supervisors and the assignee;
+# LOW breaches are only flagged as overdue.
+# Fractions work, e.g. 0.05 (3 minutes) for a live demo.
+# ---------------------------------------------------------
+
+SLA_HOURS = {
+    "HIGH": float(os.getenv("SLA_HOURS_HIGH", "2")),
+    "MEDIUM": float(os.getenv("SLA_HOURS_MEDIUM", "8")),
+    "LOW": float(os.getenv("SLA_HOURS_LOW", "24")),
+}
+
+SLA_CHECK_INTERVAL_SECONDS = int(os.getenv("SLA_CHECK_INTERVAL_SECONDS", "60"))
+
+
+# ---------------------------------------------------------
+# DEPLOYMENT
+# ---------------------------------------------------------
+
+# Browser origins allowed to call the API, comma separated,
+# e.g. "https://simms.vercel.app,http://localhost:5173".
+CORS_ORIGINS = [
+    origin.strip().rstrip("/")
+    for origin in os.getenv(
+        "CORS_ORIGINS",
+        "http://localhost:5173,http://127.0.0.1:5173"
+    ).split(",")
+    if origin.strip()
+]
+
+# Optional regex for extra origins, e.g. Vercel preview deployments:
+# "https://simms-frontend-.*\.vercel\.app"
+CORS_ORIGIN_REGEX = os.getenv("CORS_ORIGIN_REGEX") or None

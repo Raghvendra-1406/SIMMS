@@ -9,6 +9,8 @@ class UserCreate(BaseModel):
     password: str = Field(..., min_length=8)
     role: str = Field(..., min_length=1, max_length=30)
     is_active: bool = True
+    # Maintenance staff team (ELECTRICAL / HOUSEKEEPING / GENERAL)
+    team: str | None = None
 
 
 class UserLogin(BaseModel):
@@ -21,6 +23,7 @@ class UserUpdate(BaseModel):
     email: EmailStr
     role: str = Field(..., min_length=1, max_length=30)
     is_active: bool = True
+    team: str | None = None
 
 
 class PasswordUpdate(BaseModel):
@@ -38,6 +41,7 @@ class UserResponse(BaseModel):
     role: str
     created_at: datetime
     is_active: bool
+    team: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

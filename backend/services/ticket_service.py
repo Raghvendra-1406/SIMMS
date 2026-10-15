@@ -23,6 +23,7 @@ from database.repositories.ticket_history_repository import (
 
 from database.repositories.fault_repository import (
     get_fault_by_id,
+    get_fault_details,
     update_fault_status,
 )
 
@@ -34,12 +35,32 @@ from services.notification_service import (
     create_system_notification,
 )
 
+from services.fault_types import (
+    FAULT_NAMES,
+    FAULT_PRIORITIES,
+)
+
+from database.repositories.room_repository import (
+    get_room_by_id,
+)
+
+from database.repositories.device_repository import (
+    get_device_by_id,
+)
+
 from services.temporal_processor import (
     clear_window,
 )
 
 from config.settings import (
     POST_REPAIR_VERIFICATION_HOURS,
+)
+
+from services.routing_service import (
+    on_priority_changed,
+    on_ticket_reopened,
+    record_response,
+    route_new_ticket,
 )
 
 
@@ -118,19 +139,7 @@ def get_fault(fault_id):
 
 
 def determine_priority(fault_type):
-    if fault_type == "ELECTRICAL_ABNORMALITY":
-        return "HIGH"
-
-    if fault_type == "FAN_FAILURE":
-        return "MEDIUM"
-
-    if fault_type == "LIGHTS_LEFT_ON":
-        return "LOW"
-
-    if fault_type == "BOARD_NEEDS_CLEANING":
-        return "LOW"
-
-    return "MEDIUM"
+    return FAULT_PRIORITIES.get(fault_type, "MEDIUM")
 
 
 def check_post_repair_recurrence(
@@ -201,73 +210,51 @@ def check_post_repair_recurrence(
     }
 
 
+def describe_fault(fault):
+    """
+    "Fan failure in room R101 (Fan 3): 6 fans powered, 5 rotating..."
+    """
+
+    room = get_room_by_id(fault[1])
+    room_name = room[1] if room else f"#{fault[1]}"
+
+    fault_name = FAULT_NAMES.get(fault[3], fault[3])
+
+    text = f"{fault_name} in room {room_name}"
+
+    if fault[2] is not None:
+        device = get_device_by_id(fault[2])
+        text += f" ({device[3] if device else f'device {fault[2]}'})"
+
+    details = get_fault_details(fault[0]) or {}
+
+    summary = details.get("summary")
+
+    if not summary and details.get("abnormal"):
+        summary = ", ".join(details["abnormal"])
+
+    if summary:
+        text += f": {summary}"
+
+    return text
+
+
 def create_ticket_notifications(
     ticket,
     fault
 ):
     """
-    Create notifications for all active supervisors
-    when a new maintenance ticket is created.
-
-    This function only creates notifications.
-    It does not create or modify tickets.
+    Notify all active supervisors that a ticket was created.
     """
 
-    supervisors = get_users_by_role(
-        "SUPERVISOR"
+    notify_supervisors(
+        "TICKET_CREATED",
+        (
+            f"{describe_fault(fault)}. Ticket #{ticket[0]} created "
+            f"with {ticket[2]} priority."
+        ),
+        ticket[0]
     )
-
-    ticket_id = ticket[0]
-    priority = ticket[2]
-
-    fault_type = fault[3]
-    room_id = fault[1]
-    device_id = fault[2]
-
-    if fault_type == "FAN_FAILURE":
-        fault_name = "Fan failure"
-
-    elif fault_type == "LIGHTS_LEFT_ON":
-        fault_name = "Lights left on"
-
-    elif fault_type == "ELECTRICAL_ABNORMALITY":
-        fault_name = "Electrical abnormality"
-
-    elif fault_type == "BOARD_NEEDS_CLEANING":
-        fault_name = "Board needs cleaning"
-
-    else:
-        fault_name = fault_type
-
-    if device_id is not None:
-        message = (
-            f"{fault_name} detected in room {room_id} "
-            f"for device {device_id}. "
-            f"Ticket #{ticket_id} has been created "
-            f"with {priority} priority."
-        )
-
-    else:
-        message = (
-            f"{fault_name} detected in room {room_id}. "
-            f"Ticket #{ticket_id} has been created "
-            f"with {priority} priority."
-        )
-
-    for supervisor in supervisors:
-
-        supervisor_id = supervisor[0]
-        is_active = supervisor[6]
-
-        if not is_active:
-            continue
-
-        create_system_notification(
-            user_id=supervisor_id,
-            notification_type="TICKET_CREATED",
-            message=message,
-            ticket_id=ticket_id
-        )
 
 
 def create_recurrence_notification(
@@ -275,73 +262,19 @@ def create_recurrence_notification(
     fault
 ):
     """
-    Create notifications for all active supervisors
-    when a resolved ticket is reopened because the
-    same fault recurred during the verification period.
+    Notify all active supervisors that a resolved ticket was reopened
+    because the same fault recurred during the verification period.
     """
 
-    supervisors = get_users_by_role(
-        "SUPERVISOR"
+    notify_supervisors(
+        "TICKET_REOPENED",
+        (
+            f"{describe_fault(fault)}. The fault recurred during the "
+            f"post-repair verification period; ticket #{ticket[0]} "
+            f"has been reopened."
+        ),
+        ticket[0]
     )
-
-    ticket_id = ticket[0]
-
-    fault_type = fault[3]
-    room_id = fault[1]
-    device_id = fault[2]
-
-    if fault_type == "FAN_FAILURE":
-        fault_name = "Fan failure"
-
-    elif fault_type == "LIGHTS_LEFT_ON":
-        fault_name = "Lights left on"
-
-    elif fault_type == "ELECTRICAL_ABNORMALITY":
-        fault_name = "Electrical abnormality"
-
-    elif fault_type == "BOARD_NEEDS_CLEANING":
-        fault_name = "Board needs cleaning"
-
-    else:
-        fault_name = fault_type
-
-    if device_id is not None:
-        message = (
-            f"{fault_name} recurred in room {room_id} "
-            f"for device {device_id} during the "
-            f"post-repair verification period. "
-            f"Ticket #{ticket_id} has been reopened."
-        )
-
-    else:
-        message = (
-            f"{fault_name} recurred in room {room_id} "
-            f"during the post-repair verification period. "
-            f"Ticket #{ticket_id} has been reopened."
-        )
-
-    for supervisor in supervisors:
-
-        supervisor_id = supervisor[0]
-        is_active = supervisor[6]
-
-        if not is_active:
-            continue
-
-        create_system_notification(
-            user_id=supervisor_id,
-            notification_type="TICKET_REOPENED",
-            message=message,
-            ticket_id=ticket_id
-        )
-
-
-FAULT_NAMES = {
-    "FAN_FAILURE": "Fan failure",
-    "LIGHTS_LEFT_ON": "Lights left on",
-    "ELECTRICAL_ABNORMALITY": "Electrical abnormality",
-    "BOARD_NEEDS_CLEANING": "Board needs cleaning",
-}
 
 
 def notify_supervisors(notification_type, message, ticket_id):
@@ -382,12 +315,12 @@ def escalate_if_recurring(ticket, fault):
         priority=new_priority
     )
 
-    fault_name = FAULT_NAMES.get(fault[3], fault[3])
+    on_priority_changed(updated_ticket)
 
     notify_supervisors(
         "TICKET_ESCALATED",
         (
-            f"{fault_name} in room {fault[1]} recurred {recent} times "
+            f"{describe_fault(fault)}. Recurred {recent} times "
             f"in {ESCALATION_WINDOW_DAYS} days. Ticket #{ticket_id} "
             f"escalated from {priority} to {new_priority} priority."
         ),
@@ -433,12 +366,12 @@ def auto_resolve_ticket(ticket, fault):
             status="AUTO_RESOLVED"
         )
 
-        fault_name = FAULT_NAMES.get(fault[3], fault[3])
-
         notify_supervisors(
             "TICKET_AUTO_RESOLVED",
             (
-                f"{fault_name} in room {fault[1]} cleared by itself. "
+                f"{FAULT_NAMES.get(fault[3], fault[3])} in room "
+                f"{(get_room_by_id(fault[1]) or [None, fault[1]])[1]} "
+                f"cleared by itself. "
                 f"Ticket #{ticket_id} was closed automatically."
             ),
             ticket_id
@@ -493,6 +426,11 @@ def reopen_existing_ticket_for_recurrence(
         create_recurrence_notification(
             ticket=updated_ticket,
             fault=fault
+        )
+
+        on_ticket_reopened(
+            ticket=updated_ticket,
+            summary=describe_fault(fault)
         )
 
         increment_ticket_recurrence(ticket_id)
@@ -558,6 +496,12 @@ def create_fault_ticket(
         create_ticket_notifications(
             ticket=ticket,
             fault=fault
+        )
+
+        route_new_ticket(
+            ticket=ticket,
+            fault=fault,
+            summary=describe_fault(fault)
         )
 
     return ticket
@@ -630,6 +574,16 @@ def change_ticket_status(
             status=new_status
         )
 
+        if new_status == "RESOLVED":
+            # Resolving is a response even if work was never "started".
+            record_response(ticket_id)
+
+        elif new_status == "REOPENED" and fault is not None:
+            on_ticket_reopened(
+                ticket=updated_ticket,
+                summary=describe_fault(fault)
+            )
+
     if new_status == "RESOLVED" and fault is not None:
         # Readings taken before the repair must not count
         # towards a post-repair recurrence.
@@ -695,10 +649,15 @@ def change_ticket_priority(
 
     validate_priority(priority)
 
-    return update_ticket_priority(
-        ticket_id=ticket_id,
-        priority=priority
-    )
+    with transaction():
+        updated_ticket = update_ticket_priority(
+            ticket_id=ticket_id,
+            priority=priority
+        )
+
+        on_priority_changed(updated_ticket)
+
+    return updated_ticket
 
 
 def update_ticket_notes(

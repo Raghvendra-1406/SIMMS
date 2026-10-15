@@ -2,16 +2,19 @@
 Software stand-in for the ESP32 node + virtual camera.
 
 Publishes exactly the MQTT messages the firmware in
-firmware/simms_node publishes, so the backend and dashboard can be
-tested without Wokwi or hardware. It also obeys relay commands
-from the dashboard.
+firmware/simms_node publishes (circuit-level metering: one reading
+for the LIGHTS circuit, one for the FANS circuit, one for the main
+supply), so the backend and dashboard can be tested without Wokwi or
+hardware. It also obeys circuit relay commands from the dashboard.
 
     cd backend
-    python -m scripts.fake_node                          # normal room
-    python -m scripts.fake_node --people 0 --lamp on     # lights left on
-    python -m scripts.fake_node --blocked                # fan failure
+    python -m scripts.fake_node                          # 6 fans, 6 tubes on
+    python -m scripts.fake_node --blocked-fan 3          # Fan 3 powered, not rotating
+    python -m scripts.fake_node --failed-tube 4          # Tube 4 powered, dark
+    python -m scripts.fake_node --people 0               # energy wastage
     python -m scripts.fake_node --people 0 --board-ink 0.4
-    python -m scripts.fake_node --voltage 260            # electrical fault
+    python -m scripts.fake_node --fans-overload          # fans circuit overcurrent
+    python -m scripts.fake_node --voltage 260            # supply voltage fault
 
 Stop with Ctrl+C (the node then goes OFFLINE via its last will).
 """
@@ -25,6 +28,7 @@ import time
 import paho.mqtt.client as mqtt
 
 from config.settings import MQTT_BROKER_HOST, MQTT_BROKER_PORT
+from mqtt.connection import configure_client
 from mqtt.topics import (
     command_topic,
     sensor_topic,
@@ -33,12 +37,21 @@ from mqtt.topics import (
 )
 
 
-FW_VERSION = "fake-1.0"
+FW_VERSION = "fake-2.0"
+
+UNITS = 6
 
 # Same load model as the firmware (firmware/simms_node/src/main.cpp).
-LAMP_CURRENT_A = 0.18
-BASE_CURRENT_A = 0.02
-POWER_FACTOR = 0.92
+FAN_CURRENT_A = 0.30
+STALLED_FAN_CURRENT_A = 0.36   # a seized fan still draws current
+TUBE_CURRENT_A = 0.10
+CIRCUIT_STANDBY_A = 0.02
+SOCKETS_CURRENT_A = 0.40       # projector, chargers (main supply only)
+OVERLOAD_CURRENT_A = 25.0
+
+FANS_POWER_FACTOR = 0.85
+LIGHTS_POWER_FACTOR = 0.95
+SOCKETS_POWER_FACTOR = 0.90
 
 # Board thresholds (Plan v2 §8.3), same as models/board_detector.py.
 BOARD_CLEAN_MAX = 0.05
@@ -62,12 +75,11 @@ class FakeNode:
         self.node_id = f"esp32-{self.room}"
         self.camera_id = f"vcam-{self.room}"
 
-        self.relays = {
-            "lamp": args.lamp == "on",
-            "fan": args.fan == "on",
-        }
+        # Demo-panel circuit relays (classrooms themselves are not
+        # switched: Plan v2 §5.3).
+        self.relays = {"lights": True, "fans": True}
 
-        self.energy_kwh = 0.0
+        self.energy_kwh = {"MAIN": 0.0, "LIGHTS": 0.0, "FANS": 0.0}
         self.started = time.monotonic()
         self.lock = threading.Lock()
 
@@ -75,6 +87,8 @@ class FakeNode:
             callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
             client_id=f"{self.node_id}-{random.randint(0, 99999)}",
         )
+
+        configure_client(self.client)
 
         self.client.will_set(
             status_topic(self.room, self.node_id),
@@ -114,9 +128,8 @@ class FakeNode:
         with self.lock:
             self.relays[target] = state
 
-        print(f"Command: {target} -> {'ON' if state else 'OFF'}")
+        print(f"Command: {target} circuit -> {'ON' if state else 'OFF'}")
 
-        # Report the new state straight away.
         self.publish_status()
         self.publish_sensors()
 
@@ -129,12 +142,30 @@ class FakeNode:
         )
 
     # -------------------------------------------------------
+    # MODEL
+    # -------------------------------------------------------
+
+    def units_on(self):
+        with self.lock:
+            relays = dict(self.relays)
+
+        fans_on = self.args.fans_on if relays["fans"] else 0
+        lights_on = self.args.lights_on if relays["lights"] else 0
+
+        return fans_on, lights_on, relays
+
+    def fan_running(self, number, fans_on):
+        return number <= fans_on and number != self.args.blocked_fan
+
+    def tube_lit(self, number, lights_on):
+        return number <= lights_on and number != self.args.failed_tube
+
+    # -------------------------------------------------------
     # MESSAGES (same shape as the firmware)
     # -------------------------------------------------------
 
     def publish_status(self):
-        with self.lock:
-            relays = dict(self.relays)
+        _, _, relays = self.units_on()
 
         self.publish(
             status_topic(self.room, self.node_id),
@@ -161,18 +192,48 @@ class FakeNode:
                 retain=True,
             )
 
+    def circuit(self, name, current, power_factor):
+        power = self.args.voltage * current * power_factor
+
+        self.energy_kwh[name] += power * self.args.interval / 3_600_000
+
+        return {
+            "current": round(current, 3),
+            "power": round(power, 1),
+            "power_factor": power_factor,
+            "energy": round(self.energy_kwh[name], 5),
+        }
+
     def publish_sensors(self):
         args = self.args
 
-        with self.lock:
-            relays = dict(self.relays)
+        fans_on, lights_on, _ = self.units_on()
 
-        fan_current = args.fan_load if relays["fan"] else 0.0
-        lamp_current = LAMP_CURRENT_A if relays["lamp"] else 0.0
-        current = fan_current + lamp_current + BASE_CURRENT_A
-        power = args.voltage * current * POWER_FACTOR
+        fans_current = CIRCUIT_STANDBY_A + sum(
+            STALLED_FAN_CURRENT_A if n == args.blocked_fan else FAN_CURRENT_A
+            for n in range(1, fans_on + 1)
+        )
 
-        self.energy_kwh += power * args.interval / 3_600_000
+        if args.fans_overload:
+            fans_current += OVERLOAD_CURRENT_A
+
+        # A failed tube (faulty driver) still draws current.
+        lights_current = CIRCUIT_STANDBY_A + lights_on * TUBE_CURRENT_A
+
+        fans = self.circuit("FANS", fans_current, FANS_POWER_FACTOR)
+        lights = self.circuit("LIGHTS", lights_current, LIGHTS_POWER_FACTOR)
+
+        main_current = fans_current + lights_current + SOCKETS_CURRENT_A
+        main_power = (
+            fans["power"] + lights["power"]
+            + args.voltage * SOCKETS_CURRENT_A * SOCKETS_POWER_FACTOR
+        )
+
+        main = self.circuit(
+            "MAIN",
+            main_current,
+            round(main_power / (args.voltage * main_current), 2),
+        )
 
         common = {
             "node_id": self.node_id,
@@ -182,23 +243,18 @@ class FakeNode:
         self.publish(sensor_topic(self.room), {
             **common,
             "voltage": round(args.voltage, 1),
-            "current": round(current, 3),
-            "power": round(power, 1),
-            "power_factor": POWER_FACTOR,
-            "energy": round(self.energy_kwh, 5),
-            "fan_current": round(fan_current, 3),
+            "circuits": {
+                "MAIN": main,
+                "LIGHTS": lights,
+                "FANS": fans,
+            },
         })
 
         self.publish(sensor_topic(self.room), {
             **common,
             "temperature": args.temperature,
             "humidity": args.humidity,
-            "light_level": 80 if relays["lamp"] else 15,
-        })
-
-        self.publish(sensor_topic(self.room), {
-            **common,
-            "light_state": "ON" if lamp_current > 0.05 else "OFF",
+            "light_level": 80 if lights_on else 15,
         })
 
     def publish_vision(self):
@@ -207,8 +263,7 @@ class FakeNode:
 
         args = self.args
 
-        with self.lock:
-            fan_on = self.relays["fan"]
+        fans_on, lights_on, _ = self.units_on()
 
         common = {"node_id": self.camera_id}
 
@@ -218,16 +273,30 @@ class FakeNode:
             "occupancy_count": args.people,
         })
 
-        running = fan_on and not args.blocked
+        self.publish(vision_topic(self.room), {
+            **common,
+            "fans": [
+                {
+                    "device_name": f"Fan {n}",
+                    "running": self.fan_running(n, fans_on),
+                    "motion_score": 0.3 if self.fan_running(n, fans_on) else 0.0,
+                    "confidence": 0.95,
+                }
+                for n in range(1, UNITS + 1)
+            ],
+        })
 
         self.publish(vision_topic(self.room), {
             **common,
-            "device_name": "Fan 1",
-            "fan_motion": {
-                "running": running,
-                "motion_score": 0.3 if running else 0.0,
-                "confidence": 0.95,
-            },
+            "lights": [
+                {
+                    "device_name": f"Tube {n}",
+                    "lit": self.tube_lit(n, lights_on),
+                    "brightness": 0.9 if self.tube_lit(n, lights_on) else 0.1,
+                    "confidence": 0.95,
+                }
+                for n in range(1, UNITS + 1)
+            ],
         })
 
         if args.person_at_board:
@@ -270,16 +339,16 @@ class FakeNode:
                 if cycle % 3 == 1:
                     self.publish_status()
 
-                with self.lock:
-                    relays = dict(self.relays)
+                fans_on, lights_on, relays = self.units_on()
 
                 print(
-                    f"[{cycle}] lamp={'ON' if relays['lamp'] else 'off'} "
-                    f"fan={'ON' if relays['fan'] else 'off'} "
+                    f"[{cycle}] fans {fans_on}/{UNITS} "
+                    f"(blocked {self.args.blocked_fan or '-'}) "
+                    f"lights {lights_on}/{UNITS} "
+                    f"(failed {self.args.failed_tube or '-'}) "
                     f"people={self.args.people} "
-                    f"blocked={self.args.blocked} "
-                    f"board={self.args.board_ink} "
-                    f"V={self.args.voltage}"
+                    f"board={self.args.board_ink} V={self.args.voltage}"
+                    f"{' OVERLOAD' if self.args.fans_overload else ''}"
                 )
 
                 time.sleep(self.args.interval)
@@ -308,16 +377,22 @@ def main():
     parser.add_argument("--interval", type=float, default=10.0)
     parser.add_argument("--cycles", type=int, default=0,
                         help="0 = run until Ctrl+C")
-    parser.add_argument("--lamp", choices=["on", "off"], default="on")
-    parser.add_argument("--fan", choices=["on", "off"], default="on")
+    parser.add_argument("--fans-on", type=int, default=UNITS,
+                        choices=range(0, UNITS + 1),
+                        help="fans switched on (Fan 1..N)")
+    parser.add_argument("--lights-on", type=int, default=UNITS,
+                        choices=range(0, UNITS + 1),
+                        help="tube lights switched on (Tube 1..N)")
+    parser.add_argument("--blocked-fan", type=int, default=0,
+                        help="fan number that is powered but not rotating")
+    parser.add_argument("--failed-tube", type=int, default=0,
+                        help="tube number that is powered but dark")
+    parser.add_argument("--fans-overload", action="store_true",
+                        help="add 25 A to the fans circuit")
     parser.add_argument("--voltage", type=float, default=230.0)
-    parser.add_argument("--fan-load", type=float, default=0.35,
-                        help="fan branch current in A when the fan is on")
     parser.add_argument("--temperature", type=float, default=27.5)
     parser.add_argument("--humidity", type=float, default=55.0)
     parser.add_argument("--people", type=int, default=20)
-    parser.add_argument("--blocked", action="store_true",
-                        help="fan powered but not rotating")
     parser.add_argument("--board-ink", type=float, default=0.02)
     parser.add_argument("--person-at-board", action="store_true")
     parser.add_argument("--no-camera", action="store_true",

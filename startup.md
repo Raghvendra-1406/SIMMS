@@ -1,6 +1,8 @@
 # SIMMS – Getting Started
 
-Smart classroom monitoring. It detects fan failures, lights left on in empty rooms, boards left dirty, and electrical problems, then creates maintenance tickets automatically.
+Smart classroom monitoring. It detects failed fans and tube lights, energy wasted in empty rooms, boards left dirty, and electrical problems, then creates maintenance tickets automatically.
+
+Electricity is metered **per circuit** (one meter for all tube lights, one for all fans, optionally one for the main supply), not per appliance. Circuit current says how many units are on; the camera says which unit has failed.
 
 ```
 ESP32 node (Wokwi or real)   ──MQTT──►  Mosquitto  ◄──MQTT──  camera: Raspberry Pi / laptop
@@ -8,6 +10,8 @@ ESP32 node (Wokwi or real)   ──MQTT──►  Mosquitto  ◄──MQTT──
                                             ▼
                          FastAPI backend (+ PostgreSQL)  ◄──REST──  React dashboard
 ```
+
+To put it online (Vercel + Render + HiveMQ Cloud + Neon, all free), see **[DEPLOY.md](DEPLOY.md)**.
 
 ## 1. Install first
 
@@ -33,6 +37,7 @@ A database created from an **older** `schema.sql` needs the migrations applied i
 ```powershell
 psql -d simms -f backend/database/migrations/001_node_status.sql
 psql -d simms -f backend/database/migrations/002_ticket_reliability.sql
+psql -d simms -f backend/database/migrations/003_circuit_monitoring.sql
 ```
 
 ## 3. Backend (port 8000)
@@ -75,7 +80,7 @@ Check the DB connection, create the first admin (one time only), create the demo
 ```powershell
 python test_connection.py
 python -c "from services.auth_service import register_user; register_user('Admin', 'admin@simms.com', 'ChangeMe123', 'ADMIN')"
-python -m scripts.seed_demo        # room R101 + devices "Fan 1", "ESP32 Node", "Camera"
+python -m scripts.seed_demo        # room R101: Fan 1-6, Tube 1-6, "ESP32 Node", "Camera"
 uvicorn main:app --reload
 ```
 
@@ -111,11 +116,21 @@ The frontend expects the backend at `http://localhost:8000`. To use another addr
 
 | Role | What they do |
 |---|---|
-| **ADMIN** | Adds classrooms, devices, users, and draws the board, seat and fan areas on the camera image (Calibration). Can see the Live monitor. |
-| **SUPERVISOR** | Watches the **Live monitor** (switches the demo-panel lamp and fan), classrooms, faults and tickets. Gets notifications and verifies repairs. |
+| **ADMIN** | Adds classrooms, devices, users. Draws the board, seat, fan and tube-light areas on the camera image (Calibration). Learns each circuit's per-unit current (Classrooms → room → Circuits). Can see the Live monitor. |
+| **SUPERVISOR** | Watches the **Live monitor** (switches the demo-panel lights/fans circuit relays), classrooms, faults and tickets. Gets notifications and verifies repairs. |
 | **MAINTENANCE_STAFF** | Sees open tickets and marks them **RESOLVED** after fixing. |
 
-**First-time setup (as admin):** Classrooms → Devices → Users → Calibration. `scripts/seed_demo.py` does the first two for room R101.
+**First-time setup (as admin):** Classrooms → Devices (one FAN per fan, one LIGHT per tube) → Users → Calibration → Circuits (learn per-unit current). `scripts/seed_demo.py` does the first two for room R101.
+
+**Fault types:**
+
+| Fault | How it's detected | Priority |
+|---|---|---|
+| Fan failure | Fans circuit says N fans powered, camera sees fewer rotating: the stopped one is named (or "1 of Fan 3, Fan 6" when ambiguous) | HIGH |
+| Light failure | Lights circuit says N tubes powered, camera sees fewer lit | MEDIUM |
+| Energy wastage | Lights or fans powered while the room has been empty for `VACANCY_MINUTES` | MEDIUM |
+| Electrical abnormality | Supply voltage out of range, circuit overcurrent, low power factor | HIGH |
+| Board needs cleaning | Board ink > 25 % while the room has been empty for `VACANCY_MINUTES` | LOW |
 
 **Ticket flow:**
 - A fault is confirmed (4 of 5 readings), and the ticket is **OPEN**.
@@ -138,26 +153,31 @@ Three options, from most to least realistic:
 
    ```powershell
    cd backend
-   python -m scripts.fake_node                              # normal classroom
-   python -m scripts.fake_node --people 0 --lamp on         # lights left on
-   python -m scripts.fake_node --blocked                    # fan failure
+   python -m scripts.fake_node                              # 6 fans + 6 tubes on, 20 people
+   python -m scripts.fake_node --blocked-fan 3              # fan failure: Fan 3
+   python -m scripts.fake_node --failed-tube 4              # light failure: Tube 4
+   python -m scripts.fake_node --fans-on 4                  # 4 fans on: no fault
+   python -m scripts.fake_node --people 0                   # energy wastage
    python -m scripts.fake_node --people 0 --board-ink 0.4   # board needs cleaning
-   python -m scripts.fake_node --voltage 260                # electrical fault
+   python -m scripts.fake_node --fans-overload              # circuit overcurrent
+   python -m scripts.fake_node --voltage 260                # supply voltage fault
    ```
 
 3. **Single messages** with `mosquitto_pub`. Run these in Git Bash, because PowerShell breaks the JSON quotes:
 
    ```bash
-   mosquitto_pub -t "classroom/R101/sensors" -m '{"voltage": 230, "current": 3, "fan_current": 1.2}'
-   mosquitto_pub -t "classroom/R101/sensors" -m '{"light_state": "ON"}'
+   mosquitto_pub -t "classroom/R101/sensors" -m '{"voltage": 230, "circuits": {"LIGHTS": {"current": 0.62, "power": 135}, "FANS": {"current": 1.82, "power": 356}}}'
    mosquitto_pub -t "classroom/R101/vision"  -m '{"occupancy_count": 0}'
-   mosquitto_pub -t "classroom/R101/vision"  -m '{"device_name": "Fan 1", "fan_motion": {"running": false, "motion_score": 0, "confidence": 0.9}}'
+   mosquitto_pub -t "classroom/R101/vision"  -m '{"fans": [{"device_name": "Fan 1", "running": false, "confidence": 0.9}]}'
+   mosquitto_pub -t "classroom/R101/vision"  -m '{"lights": [{"device_name": "Tube 1", "lit": true, "confidence": 0.9}]}'
    mosquitto_pub -t "classroom/R101/vision"  -m '{"board": {"state": "DIRTY", "ink_ratio": 0.4, "confidence": 1.0}}'
    ```
 
 **Rules to keep in mind:**
 - A fault is confirmed when **4 of the last 5** readings are abnormal.
-- Lights left on and board cleaning also need the room to be empty for `VACANCY_MINUTES`.
+- Energy wastage and board cleaning also need the room to be empty for `VACANCY_MINUTES`.
+- A fan / tube that is off and not drawing current is normal; only a unit the circuit says is powered but the camera sees not working is faulty.
+- Units the camera can't see are never blamed.
 - A full board while people are present is normal.
 - Readings with `"state": "OCCLUDED"` or a confidence below 0.55 do not count.
 
@@ -167,12 +187,12 @@ All topics sit under an optional `MQTT_TOPIC_PREFIX`. The firmware's `TOPIC_PREF
 
 | Topic | Direction | Content |
 |---|---|---|
-| `classroom/<room>/sensors` | node → server | electrical, environment, `light_state` |
-| `classroom/<room>/vision` | camera → server | `occupancy_count` (+ seats), `board`, `fan_motion` |
+| `classroom/<room>/sensors` | node → server | `{"voltage", "circuits": {"MAIN", "LIGHTS", "FANS"}}` (current, power, power_factor, energy each); environment |
+| `classroom/<room>/vision` | camera → server | `occupancy_count` (+ seats), `board`, `{"fans": [...]}` and `{"lights": [...]}` batches (one entry per unit) |
 | `classroom/<room>/status/<node_id>` | node → server, retained | `{"state": "ONLINE"/"OFFLINE", ...}`; the last will sends OFFLINE |
-| `classroom/<room>/command` | server → node | `{"target": "LAMP"/"FAN", "state": "ON"/"OFF"}` |
+| `classroom/<room>/command` | server → node | `{"target": "LIGHTS"/"FANS", "state": "ON"/"OFF"}` (demo-panel circuit relays) |
 
-Messages may name devices with `device_name` ("Fan 1") instead of `device_id`. `<room>` must match the classroom name exactly.
+Messages may name devices with `device_name` ("Fan 1", "Tube 4") instead of `device_id`. `<room>` must match the classroom name exactly.
 
 ## 9. Camera (Raspberry Pi, or a laptop standing in for it)
 

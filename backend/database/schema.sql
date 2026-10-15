@@ -17,7 +17,9 @@ CREATE TABLE users (
     password_hash TEXT NOT NULL,
     role VARCHAR(30) NOT NULL,
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-    is_active BOOLEAN DEFAULT TRUE
+    is_active BOOLEAN DEFAULT TRUE,
+    -- Maintenance staff team: ELECTRICAL / HOUSEKEEPING / GENERAL
+    team VARCHAR(30)
 );
 
 CREATE TABLE rooms (
@@ -53,6 +55,7 @@ CREATE TABLE fault_events (
     confidence DECIMAL(5,2),
     abnormal_count INTEGER,
     recurrence_type VARCHAR(30),
+    details JSONB,
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -65,7 +68,15 @@ CREATE TABLE tickets (
     resolved_at TIMESTAMPTZ,
     closed_at TIMESTAMPTZ,
     maintenance_notes TEXT,
-    recurrence_count INTEGER NOT NULL DEFAULT 0
+    recurrence_count INTEGER NOT NULL DEFAULT 0,
+    -- Routing and SLA (Plan v2 §9)
+    category VARCHAR(30),
+    assigned_to INTEGER REFERENCES users(user_id) ON DELETE SET NULL,
+    assigned_at TIMESTAMPTZ,
+    sla_started_at TIMESTAMPTZ,
+    sla_due_at TIMESTAMPTZ,
+    started_at TIMESTAMPTZ,
+    escalated_at TIMESTAMPTZ
 );
 
 CREATE TABLE ticket_history (
@@ -163,6 +174,42 @@ CREATE TABLE node_status (
 );
 
 
+-- Calibration reference images (kept in the database: ephemeral disks).
+-- Human verdict per ticket, for the false ticket rate (Plan v2 §16.2).
+CREATE TABLE ticket_reviews (
+    ticket_id INTEGER PRIMARY KEY
+        REFERENCES tickets(ticket_id) ON DELETE CASCADE,
+    verdict VARCHAR(20) NOT NULL
+        CHECK (verdict IN ('GENUINE', 'FALSE_ALARM')),
+    note TEXT,
+    reviewed_by INTEGER REFERENCES users(user_id),
+    reviewed_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE calibration_images (
+    image_id UUID PRIMARY KEY,
+    content_type VARCHAR(40) NOT NULL,
+    data BYTEA NOT NULL,
+    created_by INTEGER REFERENCES users(user_id),
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+
+-- Per-unit current per room circuit (learned during commissioning).
+CREATE TABLE circuit_baselines (
+    circuit_baseline_id SERIAL PRIMARY KEY,
+    room_id INTEGER NOT NULL
+        REFERENCES rooms(room_id) ON DELETE CASCADE,
+    circuit VARCHAR(20) NOT NULL
+        CHECK (circuit IN ('LIGHTS', 'FANS')),
+    unit_current_a DECIMAL(8,3) NOT NULL,
+    standby_current_a DECIMAL(8,3) NOT NULL DEFAULT 0,
+    learned_units INTEGER,
+    learned_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (room_id, circuit)
+);
+
+
 -- =========================================================
 -- INDEXES
 -- =========================================================
@@ -184,6 +231,19 @@ CREATE INDEX idx_fault_events_room_status
 
 CREATE INDEX idx_tickets_fault
     ON tickets (fault_id);
+
+CREATE INDEX idx_tickets_created
+    ON tickets (created_at);
+
+CREATE INDEX idx_tickets_assigned_active
+    ON tickets (assigned_to)
+    WHERE status IN ('OPEN', 'REOPENED', 'RESOLVED');
+
+CREATE INDEX idx_tickets_sla_pending
+    ON tickets (sla_due_at)
+    WHERE status IN ('OPEN', 'REOPENED')
+      AND started_at IS NULL
+      AND escalated_at IS NULL;
 
 CREATE INDEX idx_ticket_history_ticket
     ON ticket_history (ticket_id);

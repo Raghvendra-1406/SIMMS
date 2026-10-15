@@ -5,24 +5,26 @@
   "parts": [
     { "type": "board-esp32-devkit-c-v4", "id": "esp", "top": 0, "left": 0, "attrs": {} },
 
-    { "type": "wokwi-potentiometer", "id": "potVoltage", "top": -150, "left": -300, "attrs": { "value": "640" } },
-    { "type": "wokwi-potentiometer", "id": "potFanLoad", "top": -40, "left": -300, "attrs": { "value": "384" } },
-    { "type": "wokwi-potentiometer", "id": "potPeople", "top": 70, "left": -300, "attrs": { "value": "512" } },
-    { "type": "wokwi-potentiometer", "id": "potBoardInk", "top": 180, "left": -300, "attrs": { "value": "34" } },
+    { "type": "wokwi-potentiometer", "id": "potVoltage", "top": -210, "left": -300, "attrs": { "value": "640" } },
+    { "type": "wokwi-potentiometer", "id": "potFansOn", "top": -100, "left": -300, "attrs": { "value": "1023" } },
+    { "type": "wokwi-potentiometer", "id": "potLightsOn", "top": 10, "left": -300, "attrs": { "value": "1023" } },
+    { "type": "wokwi-potentiometer", "id": "potPeople", "top": 120, "left": -300, "attrs": { "value": "512" } },
+    { "type": "wokwi-potentiometer", "id": "potBoardInk", "top": 230, "left": -300, "attrs": { "value": "34" } },
 
-    { "type": "wokwi-dht22", "id": "dht", "top": -200, "left": 260, "attrs": { "temperature": "27.5", "humidity": "55" } },
-    { "type": "wokwi-photoresistor-sensor", "id": "ldr", "top": -60, "left": 250, "attrs": { "lux": "300" } },
+    { "type": "wokwi-dht22", "id": "dht", "top": -230, "left": 260, "attrs": { "temperature": "27.5", "humidity": "55" } },
+    { "type": "wokwi-photoresistor-sensor", "id": "ldr", "top": -90, "left": 250, "attrs": { "lux": "300" } },
+    { "type": "board-ssd1306", "id": "oled", "top": -10, "left": 260, "attrs": { "i2cAddress": "0x3c" } },
 
-    { "type": "wokwi-led", "id": "ledLamp", "top": 40, "left": 260, "attrs": { "color": "yellow" } },
-    { "type": "wokwi-led", "id": "ledFan", "top": 40, "left": 320, "attrs": { "color": "blue" } },
-    { "type": "wokwi-led", "id": "ledMqtt", "top": 40, "left": 380, "attrs": { "color": "limegreen" } },
+    { "type": "wokwi-led", "id": "ledLights", "top": 90, "left": 260, "attrs": { "color": "yellow" } },
+    { "type": "wokwi-led", "id": "ledFans", "top": 90, "left": 320, "attrs": { "color": "blue" } },
+    { "type": "wokwi-led", "id": "ledMqtt", "top": 90, "left": 380, "attrs": { "color": "limegreen" } },
 
-    { "type": "wokwi-pushbutton", "id": "btnLamp", "top": 130, "left": 250, "attrs": { "color": "yellow", "key": "l", "bounce": "0" } },
-    { "type": "wokwi-pushbutton", "id": "btnFan", "top": 130, "left": 350, "attrs": { "color": "blue", "key": "f", "bounce": "0" } },
+    { "type": "wokwi-pushbutton", "id": "btnFanFault", "top": 170, "left": 250, "attrs": { "color": "blue", "key": "f", "bounce": "0" } },
+    { "type": "wokwi-pushbutton", "id": "btnTubeFault", "top": 170, "left": 350, "attrs": { "color": "yellow", "key": "t", "bounce": "0" } },
 
-    { "type": "wokwi-slide-switch", "id": "swFanBlocked", "top": 220, "left": 260, "attrs": { "bounce": "0" } },
-    { "type": "wokwi-slide-switch", "id": "swPersonAtBoard", "top": 220, "left": 330, "attrs": { "bounce": "0" } },
-    { "type": "wokwi-slide-switch", "id": "swCameraOffline", "top": 220, "left": 400, "attrs": { "bounce": "0" } }
+    { "type": "wokwi-slide-switch", "id": "swFansOverload", "top": 260, "left": 260, "attrs": { "bounce": "0" } },
+    { "type": "wokwi-slide-switch", "id": "swPersonAtBoard", "top": 260, "left": 330, "attrs": { "bounce": "0" } },
+    { "type": "wokwi-slide-switch", "id": "swCameraOffline", "top": 260, "left": 400, "attrs": { "bounce": "0" } }
   ],
   "connections": [
     [ "esp:TX", "$serialMonitor:RX", "", [] ],
@@ -32,9 +34,13 @@
     [ "potVoltage:GND", "esp:GND.1", "black", [] ],
     [ "potVoltage:SIG", "esp:34", "orange", [] ],
 
-    [ "potFanLoad:VCC", "esp:3V3", "red", [] ],
-    [ "potFanLoad:GND", "esp:GND.1", "black", [] ],
-    [ "potFanLoad:SIG", "esp:35", "orange", [] ],
+    [ "potFansOn:VCC", "esp:3V3", "red", [] ],
+    [ "potFansOn:GND", "esp:GND.1", "black", [] ],
+    [ "potFansOn:SIG", "esp:35", "blue", [] ],
+
+    [ "potLightsOn:VCC", "esp:3V3", "red", [] ],
+    [ "potLightsOn:GND", "esp:GND.1", "black", [] ],
+    [ "potLightsOn:SIG", "esp:VN", "gold", [] ],
 
     [ "potPeople:VCC", "esp:3V3", "red", [] ],
     [ "potPeople:GND", "esp:GND.1", "black", [] ],
@@ -52,20 +58,25 @@
     [ "ldr:GND", "esp:GND.2", "black", [] ],
     [ "ldr:AO", "esp:VP", "green", [] ],
 
-    [ "ledLamp:A", "esp:26", "yellow", [] ],
-    [ "ledLamp:C", "esp:GND.3", "black", [] ],
-    [ "ledFan:A", "esp:27", "blue", [] ],
-    [ "ledFan:C", "esp:GND.3", "black", [] ],
+    [ "oled:VCC", "esp:3V3", "red", [] ],
+    [ "oled:GND", "esp:GND.2", "black", [] ],
+    [ "oled:SDA", "esp:21", "cyan", [] ],
+    [ "oled:SCL", "esp:22", "cyan", [] ],
+
+    [ "ledLights:A", "esp:26", "yellow", [] ],
+    [ "ledLights:C", "esp:GND.3", "black", [] ],
+    [ "ledFans:A", "esp:27", "blue", [] ],
+    [ "ledFans:C", "esp:GND.3", "black", [] ],
     [ "ledMqtt:A", "esp:4", "limegreen", [] ],
     [ "ledMqtt:C", "esp:GND.3", "black", [] ],
 
-    [ "btnLamp:1.l", "esp:18", "yellow", [] ],
-    [ "btnLamp:2.l", "esp:GND.3", "black", [] ],
-    [ "btnFan:1.l", "esp:19", "blue", [] ],
-    [ "btnFan:2.l", "esp:GND.3", "black", [] ],
+    [ "btnFanFault:1.l", "esp:18", "blue", [] ],
+    [ "btnFanFault:2.l", "esp:GND.3", "black", [] ],
+    [ "btnTubeFault:1.l", "esp:19", "yellow", [] ],
+    [ "btnTubeFault:2.l", "esp:GND.3", "black", [] ],
 
-    [ "swFanBlocked:2", "esp:13", "gray", [] ],
-    [ "swFanBlocked:3", "esp:GND.1", "black", [] ],
+    [ "swFansOverload:2", "esp:13", "gray", [] ],
+    [ "swFansOverload:3", "esp:GND.1", "black", [] ],
     [ "swPersonAtBoard:2", "esp:14", "gray", [] ],
     [ "swPersonAtBoard:3", "esp:GND.1", "black", [] ],
     [ "swCameraOffline:2", "esp:23", "gray", [] ],

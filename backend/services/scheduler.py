@@ -3,6 +3,7 @@ import threading
 from config.settings import (
     HEALTH_INTERVAL_SECONDS,
     NODE_OFFLINE_SECONDS,
+    SLA_CHECK_INTERVAL_SECONDS,
 )
 
 from database.repositories.room_repository import (
@@ -15,6 +16,10 @@ from database.repositories.node_status_repository import (
 
 from services.health_service import (
     create_room_health_score,
+)
+
+from services.routing_service import (
+    check_sla_breaches,
 )
 
 
@@ -54,8 +59,14 @@ def check_stale_nodes():
         )
 
 
+def escalate_sla_breaches():
+    for ticket_id in check_sla_breaches():
+        log(f"Ticket #{ticket_id} missed its response SLA: escalated.")
+
+
 def _run(stop_event):
     seconds_since_health = HEALTH_INTERVAL_SECONDS
+    seconds_since_sla = SLA_CHECK_INTERVAL_SECONDS
 
     while not stop_event.is_set():
         try:
@@ -68,8 +79,18 @@ def _run(stop_event):
         except Exception as exc:
             log(f"Background job failed: {exc!r}")
 
+        # Separate try: a health failure must not skip escalations.
+        try:
+            if seconds_since_sla >= SLA_CHECK_INTERVAL_SECONDS:
+                escalate_sla_breaches()
+                seconds_since_sla = 0
+
+        except Exception as exc:
+            log(f"SLA check failed: {exc!r}")
+
         stop_event.wait(NODE_CHECK_INTERVAL_SECONDS)
         seconds_since_health += NODE_CHECK_INTERVAL_SECONDS
+        seconds_since_sla += NODE_CHECK_INTERVAL_SECONDS
 
 
 def start_scheduler():
@@ -88,7 +109,8 @@ def start_scheduler():
 
     log(
         f"Started: health every {HEALTH_INTERVAL_SECONDS} s, "
-        f"node offline after {NODE_OFFLINE_SECONDS} s."
+        f"node offline after {NODE_OFFLINE_SECONDS} s, "
+        f"SLA check every {SLA_CHECK_INTERVAL_SECONDS} s."
     )
 
     return stop_event

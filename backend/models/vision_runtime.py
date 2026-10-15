@@ -8,6 +8,7 @@ from models.person_detector import PersonDetector
 from models.fan_detector import FanDetector
 from models.board_detector import BoardDetector
 from models.seat_occupancy import SeatOccupancy
+from models.light_detector import LightDetector
 
 from mqtt.vision_publisher import VisionPublisher
 
@@ -93,6 +94,8 @@ class VisionRuntime:
         self.board_detector = BoardDetector()
 
         self.seat_occupancy = SeatOccupancy()
+
+        self.light_detector = LightDetector()
 
         self.calibration = None
 
@@ -184,6 +187,11 @@ class VisionRuntime:
             calibration_data
         )
 
+        light_result = self.light_detector.detect(
+            frame,
+            calibration_data
+        )
+
         occupancy = {
             "person_count": person_result["person_count"]
         }
@@ -208,6 +216,7 @@ class VisionRuntime:
             "calibration_version": self.calibration_version,
             "occupancy": occupancy,
             "fans": fan_result["fans"],
+            "lights": light_result["lights"],
             "board": board_result,
             "inference_ms": int((time.monotonic() - started) * 1000),
         }
@@ -260,6 +269,22 @@ class VisionRuntime:
                 f"{'running' if running else 'stopped'}",
                 (fan["x1"], fan["y1"] - 6),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
+
+        light_states = {
+            light["device_id"]: light for light in result["lights"]
+        }
+
+        for light in calibration_data.get("lights") or []:
+            state = light_states.get(light["device_id"], {})
+            lit = state.get("lit")
+            color = (0, 255, 255) if lit else (90, 90, 90)
+            cv2.rectangle(view, (light["x1"], light["y1"]),
+                          (light["x2"], light["y2"]), color, 2)
+            cv2.putText(
+                view,
+                f"tube {light['device_id']} {'lit' if lit else 'dark'}",
+                (light["x1"], light["y1"] - 6),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
 
         for person in persons:
             x1, y1, x2, y2 = person["bbox"]
@@ -332,6 +357,7 @@ class VisionRuntime:
                     f"/{result['occupancy'].get('total_seats', '-')} "
                     f"board={board['state'] if board else '-'} "
                     f"fans={[f['running'] for f in result['fans']]} "
+                    f"lights={[l['lit'] for l in result['lights']]} "
                     f"({result['inference_ms']} ms)"
                 )
 

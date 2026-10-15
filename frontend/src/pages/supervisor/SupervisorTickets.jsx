@@ -15,8 +15,10 @@ import {
 } from "../../components/ui";
 import { navigateTo } from "../../lib/session";
 import { usePolling } from "../../lib/usePolling";
+import { AssigneeLabel, SlaBadge } from "../../components/TicketRouting";
 
-const API_BASE_URL = "http://localhost:8000";
+// Backend URL: VITE_API_BASE_URL at build time (see lib/api.js).
+import { API_BASE_URL } from "../../lib/api";
 
 function getAuthHeaders() {
   const token = localStorage.getItem("access_token");
@@ -46,6 +48,8 @@ function formatDateTime(value) {
 function getFaultTypeLabel(faultType) {
   const labels = {
     FAN_FAILURE: "Fan failure",
+    LIGHT_FAILURE: "Light failure",
+    ENERGY_WASTAGE: "Energy wastage",
     LIGHTS_LEFT_ON: "Lights left on",
     BOARD_NEEDS_CLEANING: "Board needs cleaning",
     ELECTRICAL_ABNORMALITY:
@@ -68,7 +72,11 @@ const STATUS_OPTIONS = [
   { value: "CLOSED", label: "Closed" },
   { value: "REOPENED", label: "Reopened" },
   { value: "AUTO_RESOLVED", label: "Auto-resolved" },
+  { value: "OVERDUE", label: "Overdue" },
+  { value: "UNASSIGNED", label: "Unassigned" },
 ];
+
+const ACTIVE_STATUSES = new Set(["OPEN", "REOPENED", "RESOLVED"]);
 
 export default function SupervisorTickets() {
   const [tickets, setTickets] =
@@ -277,7 +285,11 @@ export default function SupervisorTickets() {
           ticket.priority || ""
         ).toUpperCase();
 
-      if (
+      if (statusFilter === "OVERDUE") {
+        if (ticket.sla_state !== "OVERDUE") return false;
+      } else if (statusFilter === "UNASSIGNED") {
+        if (ticket.assigned_to || !ACTIVE_STATUSES.has(status)) return false;
+      } else if (
         statusFilter !== "ALL" &&
         status !== statusFilter
       ) {
@@ -311,6 +323,7 @@ export default function SupervisorTickets() {
         ticket.status,
         ticket.priority,
         ticket.maintenance_notes,
+        ticket.assigned_to_name,
         fault?.fault_type,
         getFaultTypeLabel(
           fault?.fault_type
@@ -350,9 +363,14 @@ export default function SupervisorTickets() {
   }
 
   const openCount = countByStatus("OPEN");
-  const inProgressCount = countByStatus("IN_PROGRESS");
   const resolvedCount = countByStatus("RESOLVED");
   const reopenedCount = countByStatus("REOPENED");
+
+  // Routing / SLA (Plan v2 §9)
+  const overdueCount = tickets.filter((ticket) => ticket.sla_state === "OVERDUE").length;
+  const unassignedCount = tickets.filter(
+    (ticket) => !ticket.assigned_to && ACTIVE_STATUSES.has(String(ticket.status || "").toUpperCase())
+  ).length;
 
   const statusOptions = STATUS_OPTIONS.map((option) => ({
     ...option,
@@ -360,7 +378,11 @@ export default function SupervisorTickets() {
       ? undefined
       : option.value === "ALL"
         ? tickets.length
-        : countByStatus(option.value),
+        : option.value === "OVERDUE"
+          ? overdueCount
+          : option.value === "UNASSIGNED"
+            ? unassignedCount
+            : countByStatus(option.value),
   }));
 
   const hasFilters =
@@ -416,13 +438,17 @@ export default function SupervisorTickets() {
         />
         <StatCard
           unavailable={loadFailed}
-          label="In progress"
-          value={inProgressCount}
-          hint="Currently being worked on"
-          icon="wrench"
-          tone="info"
+          label="Overdue"
+          value={overdueCount}
+          hint={
+            unassignedCount > 0
+              ? `Response time missed · ${unassignedCount} unassigned`
+              : "Response time missed"
+          }
+          icon="clock"
+          tone={overdueCount > 0 ? "danger" : "neutral"}
           loading={loading}
-          onClick={() => setStatusFilter("IN_PROGRESS")}
+          onClick={() => setStatusFilter("OVERDUE")}
         />
         <StatCard
           unavailable={loadFailed}
@@ -539,6 +565,7 @@ export default function SupervisorTickets() {
                     <th scope="col">Fault</th>
                     <th scope="col">Priority</th>
                     <th scope="col">Status</th>
+                    <th scope="col">Assigned to</th>
                     <th scope="col">Created</th>
                     <th scope="col" className="text-right">
                       <span className="sr-only">Action</span>
@@ -604,6 +631,13 @@ export default function SupervisorTickets() {
                           ) : (
                             <span className="text-slate-500">—</span>
                           )}
+                          <div className="mt-1">
+                            <SlaBadge ticket={ticket} />
+                          </div>
+                        </td>
+
+                        <td className="text-xs">
+                          <AssigneeLabel ticket={ticket} />
                         </td>
 
                         <td>
@@ -676,7 +710,12 @@ export default function SupervisorTickets() {
                               {getFaultTypeLabel(fault.fault_type)}
                             </span>
                           )}
+                          <SlaBadge ticket={ticket} />
                         </div>
+
+                        <p className="mt-1.5 text-[11px]">
+                          <AssigneeLabel ticket={ticket} />
+                        </p>
 
                         <p className="num mt-2 flex items-center gap-1 text-[11px] text-slate-500">
                           <Icon name="clock" className="h-3 w-3" />

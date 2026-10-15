@@ -13,7 +13,8 @@ import {
 import { formatLabel, formatConfidence } from "../../lib/format";
 import { navigateTo } from "../../lib/session";
 
-const API_BASE_URL = "http://localhost:8000";
+// Backend URL: VITE_API_BASE_URL at build time (see lib/api.js).
+import { API_BASE_URL } from "../../lib/api";
 
 function getAuthHeaders() {
   const token = localStorage.getItem("access_token");
@@ -43,6 +44,8 @@ function formatDateTime(value) {
 function getFaultTypeLabel(faultType) {
   const labels = {
     FAN_FAILURE: "Fan failure",
+    LIGHT_FAILURE: "Light failure",
+    ENERGY_WASTAGE: "Energy wastage",
     LIGHTS_LEFT_ON: "Lights left on",
     BOARD_NEEDS_CLEANING: "Board needs cleaning",
     ELECTRICAL_ABNORMALITY:
@@ -62,6 +65,8 @@ function getFaultTypeLabel(faultType) {
 const FAULT_TYPE_META = {
   FAN_FAILURE: { icon: "fan", tone: "warning" },
   LIGHTS_LEFT_ON: { icon: "lightbulb", tone: "warning" },
+  LIGHT_FAILURE: { icon: "lightbulb", tone: "danger" },
+  ENERGY_WASTAGE: { icon: "zap", tone: "warning" },
   BOARD_NEEDS_CLEANING: { icon: "clipboard", tone: "info" },
   ELECTRICAL_ABNORMALITY: { icon: "zap", tone: "danger" },
 };
@@ -353,6 +358,14 @@ export default function SupervisorFaultDetails() {
                 {/* Left column */}
                 <div className="space-y-6">
                   <Card title="Fault details" subtitle="Read from the backend fault record" icon="alert">
+                    {(fault.details?.summary || fault.details?.abnormal?.length > 0) && (
+                      <div className="mb-5 rounded-lg border border-red-200 bg-red-50/60 px-4 py-3">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-red-700">What was detected</p>
+                        <p className="mt-1 text-sm font-medium text-red-900">
+                          {fault.details.summary || fault.details.abnormal.join(", ")}
+                        </p>
+                      </div>
+                    )}
                     <dl className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
                       <DetailItem label="Fault type">{getFaultTypeLabel(fault.fault_type)}</DetailItem>
                       <DetailItem label="Status">{fault.status ? formatLabel(fault.status) : "Unknown"}</DetailItem>
@@ -420,7 +433,7 @@ export default function SupervisorFaultDetails() {
                         return (
                           <li key={step.label} className="relative pl-6">
                             <span
-                              className={`absolute -left-[5px] top-1.5 h-2.5 w-2.5 rounded-full ring-4 ring-white ${reached ? "bg-brand-500" : "bg-slate-300"}`}
+                              className={`absolute -left-[5px] top-1.5 h-2.5 w-2.5 rounded-full ring-4 ring-surface ${reached ? "bg-brand-500" : "bg-slate-300"}`}
                               aria-hidden="true"
                             />
                             <p className="flex items-center gap-1.5 text-xs font-medium text-slate-500">

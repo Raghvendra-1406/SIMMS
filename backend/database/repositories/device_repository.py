@@ -115,6 +115,20 @@ def _fetch_device_by_id(device_id):
 
 
 def get_devices_by_room(room_id):
+    cached = _device_cache.get(("room", room_id))
+
+    if cached is not None:
+        return cached
+
+    devices = _fetch_devices_by_room(room_id)
+
+    # Stored as a tuple so callers cannot modify the cached value.
+    _device_cache.set(("room", room_id), tuple(devices))
+
+    return tuple(devices)
+
+
+def _fetch_devices_by_room(room_id):
     conn = get_connection()
     cursor = conn.cursor()
 
@@ -306,6 +320,37 @@ def update_device_status(device_id, status):
         _device_cache.clear()
 
         return device
+
+    except Exception:
+        conn.rollback()
+        raise
+
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def update_devices_last_seen(device_ids):
+    """
+    Mark several devices as seen now, in one statement.
+    Does not clear the device cache: last_seen is not used by the
+    cached lookups' callers on the ingest path.
+    """
+
+    if not device_ids:
+        return
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute("""
+            UPDATE devices
+            SET last_seen = CURRENT_TIMESTAMP
+            WHERE device_id = ANY(%s)
+        """, (list(device_ids),))
+
+        conn.commit()
 
     except Exception:
         conn.rollback()

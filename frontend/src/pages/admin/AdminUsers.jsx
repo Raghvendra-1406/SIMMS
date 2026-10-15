@@ -15,8 +15,10 @@ import {
   StatusBadge,
 } from "../../components/ui";
 import { formatLabel } from "../../lib/format";
+import { TEAM_LABELS, TEAM_OPTIONS } from "../../lib/ticketRouting";
 
-const API_BASE_URL = "http://localhost:8000";
+// Backend URL: VITE_API_BASE_URL at build time (see lib/api.js).
+import { API_BASE_URL } from "../../lib/api";
 
 function getAuthHeaders() {
   const token = localStorage.getItem("access_token");
@@ -82,6 +84,7 @@ export default function AdminUsers() {
     email: "",
     password: "",
     role: "SUPERVISOR",
+    team: "",
   });
 
   const currentUserId = localStorage.getItem("user_id");
@@ -155,6 +158,7 @@ export default function AdminUsers() {
       email: "",
       password: "",
       role: "SUPERVISOR",
+      team: "",
     });
 
     setShowPassword(false);
@@ -169,6 +173,7 @@ export default function AdminUsers() {
       email: user.email || "",
       password: "",
       role: user.role || "SUPERVISOR",
+      team: user.team || "",
     });
 
     setShowPassword(false);
@@ -212,6 +217,8 @@ export default function AdminUsers() {
         name: userForm.name.trim(),
         email: userForm.email.trim(),
         role: userForm.role,
+        // Tickets are routed to staff by team (Plan v2 §9.1).
+        team: userForm.role === "MAINTENANCE_STAFF" ? userForm.team || null : null,
       };
 
       /*
@@ -545,6 +552,11 @@ export default function AdminUsers() {
 
                       <td>
                         <RoleBadge role={user.role} />
+                        {user.role === "MAINTENANCE_STAFF" && (
+                          <p className="mt-1 text-[11px] text-slate-500">
+                            {user.team ? `${TEAM_LABELS[user.team] || user.team} team` : "No team"}
+                          </p>
+                        )}
                       </td>
 
                       <td>
@@ -726,6 +738,31 @@ export default function AdminUsers() {
               Determines which console and actions this account can access.
             </p>
           </div>
+
+          {userForm.role === "MAINTENANCE_STAFF" && (
+            <div>
+              <label htmlFor="user-team" className="label">
+                Team
+              </label>
+              <select
+                id="user-team"
+                name="team"
+                value={userForm.team}
+                onChange={handleChange}
+                className="select"
+              >
+                {TEAM_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <p className="help-text">
+                New tickets go to the least-busy member of the matching team: Electrical for fan, light,
+                electrical and energy faults, Housekeeping for board cleaning.
+              </p>
+            </div>
+          )}
 
           <div>
             <label htmlFor="user-password" className="label">

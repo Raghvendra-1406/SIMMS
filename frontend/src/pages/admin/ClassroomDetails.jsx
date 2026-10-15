@@ -16,8 +16,10 @@ import {
 } from "../../components/ui";
 import { navigateTo } from "../../lib/session";
 import { usePolling } from "../../lib/usePolling";
+import CircuitBaselines from "../../components/CircuitBaselines";
 
-const API_BASE_URL = "http://localhost:8000";
+// Backend URL: VITE_API_BASE_URL at build time (see lib/api.js).
+import { API_BASE_URL } from "../../lib/api";
 
 function getAuthHeaders() {
   const token = localStorage.getItem("access_token");
@@ -215,6 +217,74 @@ export default function ClassroomDetails() {
 
   // Keep the page in sync with live data without flashing skeletons.
   usePolling(loadData, 10000);
+
+  const [showQuickAdd, setShowQuickAdd] = useState(false);
+  const [quickForm, setQuickForm] = useState({
+    fan_count: "6",
+    light_count: "6",
+    add_node_devices: true,
+  });
+  const [quickSaving, setQuickSaving] = useState(false);
+  const [quickError, setQuickError] = useState("");
+  const [quickNotice, setQuickNotice] = useState("");
+
+  const handleQuickChange = (event) => {
+    const { name, value, type, checked } = event.target;
+
+    setQuickForm((previous) => ({
+      ...previous,
+      [name]: type === "checkbox" ? checked : value,
+    }));
+  };
+
+  // Adds "Fan 1..N", "Tube 1..N" (and the ESP32 node and camera);
+  // devices that already exist by name are kept.
+  const saveQuickAdd = async (event) => {
+    event.preventDefault();
+
+    setQuickSaving(true);
+    setQuickError("");
+
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/classrooms/${roomId}/devices/standard`,
+        {
+          method: "POST",
+          headers: {
+            ...getAuthHeaders(),
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            fan_count: Number(quickForm.fan_count) || 0,
+            light_count: Number(quickForm.light_count) || 0,
+            add_node_devices: quickForm.add_node_devices,
+          }),
+        }
+      );
+
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(
+          (typeof data?.detail === "string" && data.detail) ||
+            "Unable to add devices."
+        );
+      }
+
+      setQuickNotice(
+        data.devices_created
+          ? `${data.devices_created} device(s) added.`
+          : "All of these devices already exist."
+      );
+
+      setShowQuickAdd(false);
+      await loadDevices();
+    } catch (err) {
+      setQuickError(err.message || "Unable to add devices.");
+    } finally {
+      setQuickSaving(false);
+    }
+  };
 
   const openAddDeviceModal = () => {
     setEditingDevice(null);
@@ -546,6 +616,9 @@ export default function ClassroomDetails() {
         </Card>
       </section>
 
+      {/* CIRCUITS */}
+      <CircuitBaselines roomId={roomId} />
+
       {/* DEVICES */}
       <Card
         className="mt-6"
@@ -555,13 +628,27 @@ export default function ClassroomDetails() {
         bodyClassName=""
         actions={
           devices.length > 0 && (
-            <button type="button" onClick={openAddDeviceModal} className="btn btn-sm btn-secondary">
-              <Icon name="plus" className="h-3.5 w-3.5" />
-              Add device
-            </button>
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={() => setShowQuickAdd(true)} className="btn btn-sm btn-secondary">
+                <Icon name="fan" className="h-3.5 w-3.5" />
+                Quick add
+              </button>
+              <button type="button" onClick={openAddDeviceModal} className="btn btn-sm btn-secondary">
+                <Icon name="plus" className="h-3.5 w-3.5" />
+                Add device
+              </button>
+            </div>
           )
         }
       >
+        {quickNotice && (
+          <div className="border-b border-slate-100 px-5 py-4">
+            <Alert tone="success" onDismiss={() => setQuickNotice("")}>
+              {quickNotice}
+            </Alert>
+          </div>
+        )}
+
         {(actionError && !showDeviceModal) || deviceError ? (
           <div className="space-y-3 border-b border-slate-100 px-5 py-4">
             {actionError && !showDeviceModal && (
@@ -583,12 +670,18 @@ export default function ClassroomDetails() {
           <EmptyState
             icon="device"
             title="No devices assigned"
-            description="This classroom does not have any devices registered yet. Add the classroom's ESP32, sensors, camera, or other supported devices."
+            description="This classroom does not have any devices registered yet. Add its fans, tube lights, ESP32 node and camera in one step, or add devices one by one."
             action={
-              <button type="button" onClick={openAddDeviceModal} className="btn btn-primary">
-                <Icon name="plus" className="h-4 w-4" />
-                Add first device
-              </button>
+              <div className="flex flex-wrap justify-center gap-2">
+                <button type="button" onClick={() => setShowQuickAdd(true)} className="btn btn-primary">
+                  <Icon name="fan" className="h-4 w-4" />
+                  Add fans, tube lights & nodes
+                </button>
+                <button type="button" onClick={openAddDeviceModal} className="btn btn-secondary">
+                  <Icon name="plus" className="h-4 w-4" />
+                  Add one device
+                </button>
+              </div>
             }
           />
         ) : (
@@ -648,8 +741,8 @@ export default function ClassroomDetails() {
                             onClick={() => handleDeviceStatus(device)}
                             className={`btn btn-sm border ${
                               active
-                                ? "border-amber-200 bg-white text-amber-700 hover:bg-amber-50"
-                                : "border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50"
+                                ? "border-amber-200 bg-surface text-amber-700 hover:bg-amber-50"
+                                : "border-emerald-200 bg-surface text-emerald-700 hover:bg-emerald-50"
                             }`}
                           >
                             <Icon name="power" className="h-3.5 w-3.5" />
@@ -667,6 +760,69 @@ export default function ClassroomDetails() {
       </Card>
 
       {/* DEVICE MODAL */}
+      <Modal
+        open={showQuickAdd}
+        onClose={() => setShowQuickAdd(false)}
+        title="Quick add devices"
+        description='Creates "Fan 1…N" and "Tube 1…N" (the names the ESP32 and camera use). Existing devices are kept.'
+        footer={
+          <>
+            <button type="button" onClick={() => setShowQuickAdd(false)} className="btn btn-secondary">
+              Cancel
+            </button>
+            <button type="submit" form="quick-add-form" disabled={quickSaving} className="btn btn-primary">
+              {quickSaving && <Spinner />}
+              {quickSaving ? "Adding…" : "Add devices"}
+            </button>
+          </>
+        }
+      >
+        <form id="quick-add-form" onSubmit={saveQuickAdd} className="space-y-4">
+          {quickError && <Alert tone="danger">{quickError}</Alert>}
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label htmlFor="quick_fan_count" className="label">Fans</label>
+              <input
+                id="quick_fan_count"
+                name="fan_count"
+                type="number"
+                min="0"
+                max="50"
+                value={quickForm.fan_count}
+                onChange={handleQuickChange}
+                className="input num"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="quick_light_count" className="label">Tube lights</label>
+              <input
+                id="quick_light_count"
+                name="light_count"
+                type="number"
+                min="0"
+                max="50"
+                value={quickForm.light_count}
+                onChange={handleQuickChange}
+                className="input num"
+              />
+            </div>
+          </div>
+
+          <label className="flex items-center gap-2 text-sm text-slate-700">
+            <input
+              type="checkbox"
+              name="add_node_devices"
+              checked={quickForm.add_node_devices}
+              onChange={handleQuickChange}
+              className="h-4 w-4 rounded border-slate-300"
+            />
+            Also add the ESP32 node and the camera
+          </label>
+        </form>
+      </Modal>
+
       <Modal
         open={showDeviceModal}
         onClose={() => setShowDeviceModal(false)}

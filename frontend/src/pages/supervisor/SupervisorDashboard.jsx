@@ -15,7 +15,8 @@ import { formatLabel, formatConfidence, isHealthyStatus } from "../../lib/format
 import { navigateTo } from "../../lib/session";
 import { usePolling } from "../../lib/usePolling";
 
-const API_BASE_URL = "http://localhost:8000";
+// Backend URL: VITE_API_BASE_URL at build time (see lib/api.js).
+import { API_BASE_URL } from "../../lib/api";
 
 function formatNumber(value) {
   if (value === null || value === undefined || value === "") {

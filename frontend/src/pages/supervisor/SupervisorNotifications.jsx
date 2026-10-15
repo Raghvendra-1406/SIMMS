@@ -15,7 +15,8 @@ import {
 import { formatLabel } from "../../lib/format";
 import { navigateTo } from "../../lib/session";
 
-const API_BASE_URL = "http://localhost:8000";
+// Backend URL: VITE_API_BASE_URL at build time (see lib/api.js).
+import { API_BASE_URL } from "../../lib/api";
 
 function getToken() {
     return localStorage.getItem("access_token");
@@ -271,9 +272,12 @@ export default function SupervisorNotifications() {
         }
 
         if (notification.ticket_id) {
-            navigateTo(
-                `/supervisor/tickets/${notification.ticket_id}`
-            );
+            const base =
+                localStorage.getItem("role") === "MAINTENANCE_STAFF"
+                    ? "/maintenance/tickets"
+                    : "/supervisor/tickets";
+
+            navigateTo(`${base}/${notification.ticket_id}`);
         }
     };
 

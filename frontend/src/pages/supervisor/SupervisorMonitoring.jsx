@@ -27,6 +27,8 @@ const COMMAND_TIMEOUT_MS = 10000;
 
 const FAULT_LABELS = {
   FAN_FAILURE: "Fan failure",
+  LIGHT_FAILURE: "Light failure",
+  ENERGY_WASTAGE: "Energy wastage",
   LIGHTS_LEFT_ON: "Lights left on",
   ELECTRICAL_ABNORMALITY: "Electrical abnormality",
   BOARD_NEEDS_CLEANING: "Board needs cleaning",
@@ -47,7 +49,7 @@ function faultLabel(type) {
 function relayConfirmed(rooms, roomId, target, state) {
   const room = rooms.find((item) => item.room_id === roomId);
   const relays = room?.nodes.find((node) => node.kind === "SENSOR_NODE")?.details?.relays;
-  const actual = target === "LAMP" ? relays?.lamp : relays?.fan;
+  const actual = target === "LIGHTS" ? relays?.lights : relays?.fans;
   return actual === (state === "ON");
 }
 
@@ -100,7 +102,7 @@ function Freshness({ age }) {
 
 function Panel({ icon, title, age, children, className = "" }) {
   return (
-    <section className={`rounded-xl border border-slate-200 bg-white p-4 ${className}`}>
+    <section className={`rounded-xl border border-slate-200 bg-surface p-4 ${className}`}>
       <div className="mb-3 flex items-center justify-between gap-2">
         <p className="flex items-center gap-2 text-[13px] font-semibold text-slate-800">
           <Icon name={icon} className="h-4 w-4 text-slate-500" />
@@ -136,10 +138,88 @@ function RelayButton({ label, icon, on, pending, disabled, onToggle }) {
 // Room card
 // ---------------------------------------------------------------------------
 
+const UNIT_STATE_STYLES = {
+  WORKING: { tile: "border-emerald-200 bg-emerald-50 text-emerald-700", label: "Working" },
+  OFF: { tile: "border-slate-200 bg-slate-50 text-slate-400", label: "Off" },
+  FAILED: { tile: "border-red-300 bg-red-50 text-red-700 ring-2 ring-red-200", label: "Failed" },
+  SUSPECT: { tile: "border-amber-300 bg-amber-50 text-amber-800", label: "Suspect" },
+  UNKNOWN: { tile: "border-dashed border-slate-300 bg-white text-slate-400", label: "No camera" },
+};
+
+// Tile state for one fan / tube: the backend already combined the
+// circuit count with the camera (unit.state, unit.suspect, unit.failed).
+function unitTileState(unit) {
+  if (unit.failed) return "FAILED";
+  if (unit.suspect) return "SUSPECT";
+  if (unit.state === "WORKING") return "WORKING";
+  if (unit.state === "NOT_WORKING") return "OFF";
+  return "UNKNOWN";
+}
+
+function UnitGrid({ units, icon, workingWord, ageOf }) {
+  if (!units.length) {
+    return <p className="text-xs text-slate-500">No units registered for this room.</p>;
+  }
+
+  return (
+    <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+      {units.map((unit) => {
+        const tileState = unitTileState(unit);
+        const style = UNIT_STATE_STYLES[tileState];
+        const spinning = icon === "fan" && tileState === "WORKING";
+
+        return (
+          <div
+            key={unit.device_id}
+            title={`${unit.device_name}: ${style.label}${unit.observed_at ? ` · camera ${formatAge(ageOf(unit.observed_at))}` : ""}`}
+            className={`flex flex-col items-center gap-1 rounded-lg border px-2 py-2 text-center ${style.tile}`}
+          >
+            <Icon name={icon} className={`h-5 w-5 ${spinning ? "animate-spin [animation-duration:1.5s]" : ""}`} />
+            <span className="truncate text-[11.5px] font-semibold">{unit.device_name}</span>
+            <span className="text-[10.5px] font-medium">
+              {tileState === "WORKING" ? workingWord : style.label}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function CircuitRow({ name, circuit, showUnits }) {
+  const units =
+    showUnits && circuit?.powered_units !== null && circuit?.powered_units !== undefined
+      ? `${circuit.powered_units}/${circuit.units_total} on`
+      : null;
+
+  return (
+    <div className={`rounded-lg border px-3 py-2.5 ${circuit?.overloaded ? "border-red-300 bg-red-50" : "border-slate-200 bg-slate-50/60"}`}>
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[12.5px] font-semibold text-slate-800">{name}</p>
+        {circuit?.overloaded ? (
+          <StatusBadge tone="danger" size="sm" label="Overload" />
+        ) : (
+          units && <span className="num text-[11.5px] font-semibold text-slate-600">{units}</span>
+        )}
+      </div>
+      <dl className="mt-1.5 grid grid-cols-3 gap-2">
+        <Metric label="Current" value={formatNumber(circuit?.current, 2)} unit="A" />
+        <Metric label="Power" value={formatNumber(circuit?.power, 0)} unit="W" />
+        <Metric label="Energy" value={formatNumber(circuit?.energy, 3)} unit="kWh" />
+      </dl>
+      {showUnits && circuit?.unit_current_a && (
+        <p className="mt-1 text-[10.5px] text-slate-500">
+          {formatNumber(circuit.unit_current_a, 2)} A per unit
+          {circuit.baseline_learned ? " (learned)" : " (default)"}
+        </p>
+      )}
+    </div>
+  );
+}
+
 function RoomCard({ room, ageOf, canControl, pendingCommands, onCommand }) {
   const electrical = room.sensors?.ELECTRICAL;
   const environment = room.sensors?.ENVIRONMENT;
-  const light = room.sensors?.LIGHT;
   const occupancy = room.vision?.OCCUPANCY;
   const board = room.vision?.BOARD;
 
@@ -147,12 +227,12 @@ function RoomCard({ room, ageOf, canControl, pendingCommands, onCommand }) {
   const relays = sensorNode?.details?.relays || null;
   const nodeOnline = sensorNode?.state === "ONLINE";
 
-  const e = electrical?.data || {};
+  const circuits = room.circuits || {};
+  const checks = room.unit_checks || {};
   const env = environment?.data || {};
   const occ = occupancy?.data || {};
   const boardData = board?.data?.board || {};
 
-  const lightState = light?.data?.light_state;
   const health = room.health;
   const seatStates = occ.seat_states ? Object.entries(occ.seat_states) : [];
 
@@ -161,8 +241,17 @@ function RoomCard({ room, ageOf, canControl, pendingCommands, onCommand }) {
     return Boolean(pending) && !relayConfirmed([room], room.room_id, target, pending.state);
   };
 
-  const lampPending = isPending("LAMP");
-  const fanPending = isPending("FAN");
+  const relayControl = (target, label, on) =>
+    canControl && (
+      <RelayButton
+        label={label}
+        icon="power"
+        on={relays ? on : null}
+        pending={isPending(target)}
+        disabled={!nodeOnline}
+        onToggle={() => onCommand(room, target, on ? "OFF" : "ON")}
+      />
+    );
 
   return (
     <Card
@@ -214,19 +303,46 @@ function RoomCard({ room, ageOf, canControl, pendingCommands, onCommand }) {
         )}
       </div>
 
-      {/* Readings */}
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <Panel icon="zap" title="Electrical" age={ageOf(electrical?.observed_at)}>
-          <dl className="grid grid-cols-3 gap-3">
-            <Metric label="Voltage" value={formatNumber(e.voltage)} unit="V" emphasis />
-            <Metric label="Current" value={formatNumber(e.current, 2)} unit="A" emphasis />
-            <Metric label="Power" value={formatNumber(e.power, 0)} unit="W" emphasis />
-            <Metric label="Fan branch" value={formatNumber(e.fan_current, 2)} unit="A" />
-            <Metric label="Power factor" value={formatNumber(e.power_factor, 2)} />
-            <Metric label="Energy" value={formatNumber(e.energy, 3)} unit="kWh" />
-          </dl>
+      {/* Circuits */}
+      <Panel icon="zap" title="Circuits" age={ageOf(electrical?.observed_at)}>
+        <div className="mb-3 flex flex-wrap items-center gap-x-6 gap-y-1">
+          <Metric label="Supply voltage" value={formatNumber(electrical?.data?.voltage)} unit="V" emphasis />
+          <Metric label="Room total" value={formatNumber(circuits.MAIN?.power, 0)} unit="W" emphasis />
+        </div>
+        <div className="grid gap-2 md:grid-cols-3">
+          <CircuitRow name="Main supply" circuit={circuits.MAIN} />
+          <CircuitRow name="Lights circuit" circuit={circuits.LIGHTS} showUnits />
+          <CircuitRow name="Fans circuit" circuit={circuits.FANS} showUnits />
+        </div>
+      </Panel>
+
+      {/* Units */}
+      <div className="grid gap-3 xl:grid-cols-2">
+        <Panel icon="fan" title="Fans" age={false}>
+          <p className={`mb-3 text-[12.5px] ${checks.fans?.status === "FAULT" ? "font-semibold text-red-700" : "text-slate-600"}`}>
+            {checks.fans?.summary || "No data yet"}
+          </p>
+          <UnitGrid units={room.fans} icon="fan" workingWord="Rotating" ageOf={ageOf} />
+          <div className="mt-3 flex items-center justify-between gap-2">
+            <p className="text-[11.5px] text-slate-500">Circuit relay: {relays ? (relays.fans ? "on" : "off") : "unknown"}</p>
+            {relayControl("FANS", "fans", relays?.fans)}
+          </div>
         </Panel>
 
+        <Panel icon="lightbulb" title="Tube lights" age={false}>
+          <p className={`mb-3 text-[12.5px] ${checks.lights?.status === "FAULT" ? "font-semibold text-red-700" : "text-slate-600"}`}>
+            {checks.lights?.summary || "No data yet"}
+          </p>
+          <UnitGrid units={room.lights || []} icon="lightbulb" workingWord="Lit" ageOf={ageOf} />
+          <div className="mt-3 flex items-center justify-between gap-2">
+            <p className="text-[11.5px] text-slate-500">Circuit relay: {relays ? (relays.lights ? "on" : "off") : "unknown"}</p>
+            {relayControl("LIGHTS", "lights", relays?.lights)}
+          </div>
+        </Panel>
+      </div>
+
+      {/* Room readings */}
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         <Panel icon="thermometer" title="Environment" age={ageOf(environment?.observed_at)}>
           <dl className="grid grid-cols-3 gap-3">
             <Metric label="Temperature" value={formatNumber(env.temperature)} unit="°C" emphasis />
@@ -281,77 +397,6 @@ function RoomCard({ room, ageOf, canControl, pendingCommands, onCommand }) {
         </Panel>
       </div>
 
-      {/* Loads and controls */}
-      <div className="grid gap-3 lg:grid-cols-2">
-        <Panel icon="lightbulb" title="Lights" age={ageOf(light?.observed_at)}>
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <span className={`flex h-10 w-10 items-center justify-center rounded-xl ${lightState === "ON" ? "bg-amber-100 text-amber-600" : "bg-slate-100 text-slate-400"}`}>
-                <Icon name="lightbulb" className="h-5 w-5" />
-              </span>
-              <div>
-                <p className="text-sm font-semibold text-slate-900">
-                  {lightState === "ON" ? "On" : lightState === "OFF" ? "Off" : "Unknown"}
-                </p>
-                <p className="text-[11.5px] text-slate-500">
-                  Relay: {relays ? (relays.lamp ? "on" : "off") : "unknown"}
-                </p>
-              </div>
-            </div>
-            {canControl && (
-              <RelayButton
-                label="lamp"
-                icon="power"
-                on={relays ? relays.lamp : null}
-                pending={lampPending}
-                disabled={!nodeOnline}
-                onToggle={() => onCommand(room, "LAMP", relays?.lamp ? "OFF" : "ON")}
-              />
-            )}
-          </div>
-        </Panel>
-
-        <Panel icon="fan" title="Fans" age={false}>
-          <div className="space-y-3">
-            {room.fans.length === 0 ? (
-              <p className="text-xs text-slate-500">No fan devices registered for this room.</p>
-            ) : (
-              room.fans.map((fan) => {
-                const motion = fan.data?.fan_motion;
-                const running = motion?.running;
-                return (
-                  <div key={fan.device_id} className="flex items-center justify-between gap-3">
-                    <div className="flex min-w-0 items-center gap-3">
-                      <span className={`flex h-10 w-10 items-center justify-center rounded-xl ${running ? "bg-sky-100 text-sky-600" : "bg-slate-100 text-slate-400"}`}>
-                        <Icon name="fan" className={`h-5 w-5 ${running ? "animate-spin [animation-duration:1.5s]" : ""}`} />
-                      </span>
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-slate-900">
-                          {fan.device_name} · {motion ? (running ? "Rotating" : "Not rotating") : "No camera data"}
-                        </p>
-                        <p className="text-[11.5px] text-slate-500">
-                          Relay: {relays ? (relays.fan ? "on" : "off") : "unknown"} · camera {formatAge(ageOf(fan.observed_at))}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })
-            )}
-            {canControl && (
-              <RelayButton
-                label="fan"
-                icon="power"
-                on={relays ? relays.fan : null}
-                pending={fanPending}
-                disabled={!nodeOnline}
-                onToggle={() => onCommand(room, "FAN", relays?.fan ? "OFF" : "ON")}
-              />
-            )}
-          </div>
-        </Panel>
-      </div>
-
       {/* Faults */}
       {room.active_faults.length > 0 && (
         <div className="rounded-xl border border-red-200 bg-red-50/60 p-4">
@@ -359,16 +404,26 @@ function RoomCard({ room, ageOf, canControl, pendingCommands, onCommand }) {
             <Icon name="alert" className="h-4 w-4" />
             Active faults
           </p>
-          <ul className="space-y-1.5">
-            {room.active_faults.map((fault) => (
-              <li key={fault.fault_id} className="flex flex-wrap items-center justify-between gap-2 text-[13px] text-red-900">
-                <span className="font-medium">
-                  {faultLabel(fault.fault_type)}
-                  <span className="num ml-2 text-xs font-normal text-red-700">#{fault.fault_id}</span>
-                </span>
-                <span className="text-xs text-red-700">detected {formatAge(ageOf(fault.detected_at))}</span>
-              </li>
-            ))}
+          <ul className="space-y-2">
+            {room.active_faults.map((fault) => {
+              const summary =
+                fault.details?.summary ||
+                (Array.isArray(fault.details?.abnormal) ? fault.details.abnormal.join(", ") : null);
+
+              return (
+                <li key={fault.fault_id} className="text-[13px] text-red-900">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="font-medium">
+                      {faultLabel(fault.fault_type)}
+                      {fault.device_name && ` · ${fault.device_name}`}
+                      <span className="num ml-2 text-xs font-normal text-red-700">#{fault.fault_id}</span>
+                    </span>
+                    <span className="text-xs text-red-700">detected {formatAge(ageOf(fault.detected_at))}</span>
+                  </div>
+                  {summary && <p className="mt-0.5 text-xs text-red-700">{summary}</p>}
+                </li>
+              );
+            })}
           </ul>
         </div>
       )}

@@ -171,3 +171,60 @@ def activate_device(device_id):
         device_id=device_id,
         status="ACTIVE"
     )
+
+# Standard devices of a metered classroom (names the firmware and the
+# vision runtime use: "Fan 1".."Fan N", "Tube 1".."Tube N").
+NODE_DEVICES = [
+    ("SENSOR_NODE", "ESP32 Node"),
+    ("CAMERA", "Camera"),
+]
+
+
+def add_standard_devices(
+    room_id,
+    fan_count=0,
+    light_count=0,
+    include_nodes=True
+):
+    """
+    Create the room's fans, tube lights and (optionally) its ESP32
+    node and camera. Devices that already exist by name are kept, so
+    this is safe to run again, e.g. to add more fans later.
+
+    Returns the list of created device rows.
+    """
+
+    validate_room_exists(room_id)
+
+    if not 0 <= fan_count <= 50 or not 0 <= light_count <= 50:
+        raise ValueError(
+            "Fan and tube-light counts must be between 0 and 50."
+        )
+
+    wanted = [
+        *[("FAN", f"Fan {n}") for n in range(1, fan_count + 1)],
+        *[("LIGHT", f"Tube {n}") for n in range(1, light_count + 1)],
+        *(NODE_DEVICES if include_nodes else []),
+    ]
+
+    existing_names = {
+        str(device[3]).strip().lower()
+        for device in get_devices_by_room(room_id)
+    }
+
+    created = []
+
+    for device_type, device_name in wanted:
+        if device_name.lower() in existing_names:
+            continue
+
+        created.append(
+            create_device(
+                room_id=room_id,
+                device_type=device_type,
+                device_name=device_name,
+                status="ACTIVE"
+            )
+        )
+
+    return created

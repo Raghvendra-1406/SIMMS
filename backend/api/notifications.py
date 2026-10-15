@@ -23,11 +23,16 @@ router = APIRouter(
 )
 
 
+# Supervisors get ticket events; maintenance staff get assignment,
+# reopen and SLA notices (Plan v2 §9). Each user only sees their own.
+NOTIFIED_ROLES = {"SUPERVISOR", "MAINTENANCE_STAFF"}
+
+
 def require_supervisor(current_user):
-    if current_user["role"] != "SUPERVISOR":
+    if current_user["role"] not in NOTIFIED_ROLES:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only supervisors can access notifications."
+            detail="Only supervisors and maintenance staff have notifications."
         )
 
     return current_user

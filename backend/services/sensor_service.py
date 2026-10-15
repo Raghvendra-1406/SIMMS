@@ -88,7 +88,7 @@ def validate_electrical_data(data):
         "power",
         "power_factor",
         "energy",
-        "fan_current",
+        "circuits",
     }
 
     if not any(field in data for field in allowed_fields):
@@ -96,6 +96,17 @@ def validate_electrical_data(data):
             "Electrical observation must contain at least one "
             "valid electrical measurement."
         )
+
+    circuits = data.get("circuits")
+
+    if circuits is not None:
+        if not isinstance(circuits, dict) or not all(
+            isinstance(reading, dict) for reading in circuits.values()
+        ):
+            raise ValueError(
+                "circuits must map a circuit name (MAIN, LIGHTS, FANS) "
+                "to its reading."
+            )
 
 
 def validate_environment_data(data):

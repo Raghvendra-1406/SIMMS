@@ -11,6 +11,7 @@ import SupervisorDashboard from "./pages/supervisor/SupervisorDashboard";
 import SupervisorClassrooms from "./pages/supervisor/SupervisorClassrooms";
 import SupervisorClassroomDetails from "./pages/supervisor/SupervisorClassroomDetails";
 import SupervisorMonitoring from "./pages/supervisor/SupervisorMonitoring";
+import SupervisorStatistics from "./pages/supervisor/SupervisorStatistics";
 import SupervisorTickets from "./pages/supervisor/SupervisorTickets";
 import SupervisorTicketDetails from "./pages/supervisor/SupervisorTicketDetails";
 import SupervisorFaults from "./pages/supervisor/SupervisorFaults";
@@ -21,8 +22,11 @@ import MaintenanceDashboard from "./pages/maintenance/MaintenanceDashboard";
 import MaintenanceTickets from "./pages/maintenance/MaintenanceTickets";
 import MaintenanceTicketDetails from "./pages/maintenance/MaintenanceTicketDetails";
 
+import { motion } from "framer-motion";
 import Icon from "./components/Icon";
 import { BrandMark } from "./components/AppShell";
+import ThemeToggle from "./components/ThemeToggle";
+import { SPRING_SOFT } from "./lib/motion";
 
 function StatusScreen({ icon, title, message }) {
     const role = localStorage.getItem("role");
@@ -36,8 +40,14 @@ function StatusScreen({ icon, title, message }) {
                 : "/";
 
     return (
-        <main className="flex min-h-dvh items-center justify-center bg-canvas px-5">
-            <div className="card w-full max-w-sm animate-slide-up p-8 text-center">
+        <main className="relative flex min-h-dvh items-center justify-center bg-canvas px-5">
+            <ThemeToggle className="absolute left-5 top-5 sm:left-8 sm:top-8" />
+            <motion.div
+                className="card w-full max-w-sm p-8 text-center"
+                initial={{ opacity: 0, y: 16, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                transition={SPRING_SOFT}
+            >
                 <div className="mx-auto mb-6 flex w-fit items-center gap-2.5">
                     <BrandMark className="h-8 w-8" textClass="text-sm" />
                     <span className="text-sm font-bold tracking-[0.16em] text-slate-900">SIMMS</span>
@@ -51,7 +61,7 @@ function StatusScreen({ icon, title, message }) {
                     <Icon name="arrowLeft" className="h-4 w-4" />
                     Back to your dashboard
                 </a>
-            </div>
+            </motion.div>
         </main>
     );
 }
@@ -114,6 +124,13 @@ function App() {
     }
 
     if (
+        path === "/admin/statistics" &&
+        role === "ADMIN"
+    ) {
+        return <SupervisorStatistics />;
+    }
+
+    if (
         path === "/admin/calibration" &&
         role === "ADMIN"
     ) {
@@ -144,6 +161,13 @@ function App() {
         role === "SUPERVISOR"
     ) {
         return <SupervisorMonitoring />;
+    }
+
+    if (
+        path === "/supervisor/statistics" &&
+        role === "SUPERVISOR"
+    ) {
+        return <SupervisorStatistics />;
     }
 
     if (
@@ -203,6 +227,13 @@ function App() {
         role === "MAINTENANCE_STAFF"
     ) {
         return <MaintenanceTickets />;
+    }
+
+    if (
+        path === "/maintenance/notifications" &&
+        role === "MAINTENANCE_STAFF"
+    ) {
+        return <SupervisorNotifciations />;
     }
 
 

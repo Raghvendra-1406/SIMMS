@@ -123,3 +123,12 @@ docs/archive/
 # FIRMWARE (PlatformIO build output)
 # =========================================================
 .pio/
+
+
+# =========================================================
+# DEPLOYMENT (Vercel CLI link)
+# =========================================================
+.vercel/
+
+# ESP32 Wi-Fi / broker credentials (copy from secrets.example.h)
+firmware/simms_node/src/secrets.h

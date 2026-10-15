@@ -1,6 +1,7 @@
 import threading
 
 from collections import deque
+from datetime import datetime, timezone
 
 WINDOW_SIZE = 5
 CONFIRMATION_THRESHOLD = 4
@@ -15,6 +16,10 @@ RECHECK_EVERY = 12
 
 
 _windows = {}
+
+# key -> arrival time of each vote in the window (same length/order),
+# so a confirmed fault can report when its abnormal run began.
+_vote_times = {}
 
 # key -> consecutive observations for which the window was confirmed
 _confirmed_streaks = {}
@@ -74,19 +79,32 @@ def add_observation(
             device_id=device_id
         )
 
+        key = get_window_key(
+            room_id=room_id,
+            fault_type=fault_type,
+            device_id=device_id
+        )
+
+        times = _vote_times.setdefault(
+            key,
+            deque(maxlen=WINDOW_SIZE)
+        )
+
+        # Keep both deques aligned (e.g. after clear_window).
+        while len(times) > len(window):
+            times.popleft()
+
+        while len(times) < len(window):
+            times.appendleft(None)
+
         window.append(bool(is_abnormal))
+        times.append(datetime.now(timezone.utc))
 
         abnormal_count = sum(window)
 
         confirmed = (
             len(window) == WINDOW_SIZE
             and abnormal_count >= CONFIRMATION_THRESHOLD
-        )
-
-        key = get_window_key(
-            room_id=room_id,
-            fault_type=fault_type,
-            device_id=device_id
         )
 
         streak = (
@@ -122,6 +140,21 @@ def add_observation(
             # (Plan v2 §7.1 recovery threshold): when the caller
             # should check for auto-resolution.
             "newly_recovered": recovered and not was_recovered,
+            # Arrival time of the earliest abnormal vote in a
+            # confirmed window: the fault's onset as the system saw
+            # it, used for detection-latency statistics.
+            "onset_at": (
+                min(
+                    (
+                        ts
+                        for vote, ts in zip(window, times)
+                        if vote and ts is not None
+                    ),
+                    default=None
+                )
+                if confirmed
+                else None
+            ),
         }
 
 
@@ -208,5 +241,6 @@ def clear_window(
 
     with _windows_lock:
         _windows.pop(key, None)
+        _vote_times.pop(key, None)
         _confirmed_streaks.pop(key, None)
         _recovered_states.pop(key, None)

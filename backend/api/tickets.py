@@ -7,6 +7,7 @@ from dependencies.auth_dependencies import (
 )
 
 from schemas.ticket_schema import (
+    TicketAssign,
     TicketCreate,
     TicketMaintenanceNotesUpdate,
     TicketPriorityUpdate,
@@ -25,13 +26,28 @@ from services.ticket_service import (
     update_ticket_notes,
 )
 
+from services.routing_service import (
+    assign_ticket,
+    can_staff_act,
+    routing_fields,
+    start_ticket,
+)
+
+from database.repositories.ticket_routing_repository import (
+    get_maintenance_staff,
+    get_ticket_routing,
+)
+
 router = APIRouter(
     prefix="/tickets",
     tags=["Tickets"]
 )
 
 
-def ticket_to_response(ticket):
+def ticket_to_response(ticket, routing=None):
+    if routing is None:
+        routing = get_ticket_routing([ticket[0]]).get(ticket[0])
+
     return {
         "ticket_id": ticket[0],
         "fault_id": ticket[1],
@@ -40,8 +56,22 @@ def ticket_to_response(ticket):
         "created_at": ticket[4],
         "resolved_at": ticket[5],
         "closed_at": ticket[6],
-        "maintenance_notes": ticket[7]
+        "maintenance_notes": ticket[7],
+        **routing_fields(ticket, routing),
     }
+
+
+def tickets_to_response(tickets):
+    """
+    One routing query for the whole list.
+    """
+
+    routing = get_ticket_routing(ticket[0] for ticket in tickets)
+
+    return [
+        ticket_to_response(ticket, routing.get(ticket[0], {}))
+        for ticket in tickets
+    ]
 
 
 # ---------------------------------------------------------
@@ -89,12 +119,7 @@ def create_ticket_endpoint(
 def get_all_tickets_endpoint(
     current_user=Depends(require_admin_or_supervisor)
 ):
-    tickets = get_tickets()
-
-    return [
-        ticket_to_response(ticket)
-        for ticket in tickets
-    ]
+    return tickets_to_response(get_tickets())
 
 
 # ---------------------------------------------------------
@@ -107,14 +132,35 @@ def get_all_tickets_endpoint(
     response_model=list[TicketResponse]
 )
 def get_open_tickets_endpoint(
+    mine: bool = False,
     current_user=Depends(get_current_user)
 ):
-    tickets = get_open_ticket_list()
+    """
+    Active tickets. ?mine=true: only those assigned to the caller
+    plus unassigned ones (the maintenance staff work list).
+    """
 
-    return [
-        ticket_to_response(ticket)
-        for ticket in tickets
-    ]
+    tickets = tickets_to_response(get_open_ticket_list())
+
+    if mine:
+        tickets = [
+            ticket for ticket in tickets
+            if ticket["assigned_to"] in (None, current_user["user_id"])
+        ]
+
+    return tickets
+
+
+# ---------------------------------------------------------
+# MAINTENANCE STAFF WITH TEAM AND WORKLOAD
+# ADMIN + SUPERVISOR (assignment picker)
+# ---------------------------------------------------------
+
+@router.get("/staff")
+def get_staff_endpoint(
+    current_user=Depends(require_admin_or_supervisor)
+):
+    return get_maintenance_staff()
 
 
 # ---------------------------------------------------------
@@ -131,12 +177,7 @@ def get_tickets_for_fault(
     current_user=Depends(require_admin_or_supervisor)
 ):
     try:
-        tickets = get_fault_tickets(fault_id)
-
-        return [
-            ticket_to_response(ticket)
-            for ticket in tickets
-        ]
+        return tickets_to_response(get_fault_tickets(fault_id))
 
     except ValueError as exc:
         raise HTTPException(
@@ -195,12 +236,19 @@ def update_ticket_status_endpoint(
     requested_status = ticket_status.status
     user_role = current_user["role"]
 
-    # Maintenance staff can only mark a ticket as RESOLVED.
+    # Maintenance staff can only mark a ticket as RESOLVED,
+    # and only one assigned to them (or unassigned).
     if user_role == "MAINTENANCE_STAFF":
         if requested_status != "RESOLVED":
             raise HTTPException(
                 status_code=403,
                 detail="Maintenance Staff can only resolve tickets."
+            )
+
+        if not can_staff_act(ticket_id, current_user["user_id"]):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="This ticket is assigned to someone else."
             )
 
     # Only the three defined roles should reach this endpoint.
@@ -308,3 +356,88 @@ def update_ticket_notes_endpoint(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(exc)
         )
+
+
+# ---------------------------------------------------------
+# ASSIGN / REASSIGN / UNASSIGN
+# ADMIN + SUPERVISOR
+# ---------------------------------------------------------
+
+@router.put(
+    "/{ticket_id}/assignee",
+    response_model=TicketResponse
+)
+def assign_ticket_endpoint(
+    ticket_id: int,
+    assignment: TicketAssign,
+    current_user=Depends(require_admin_or_supervisor)
+):
+    try:
+        ticket = get_ticket(ticket_id)
+
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc)
+        )
+
+    try:
+        routing = assign_ticket(
+            ticket=ticket,
+            user_id=assignment.user_id,
+            assigned_by=current_user["user_id"]
+        )
+
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc)
+        )
+
+    return ticket_to_response(ticket, routing)
+
+
+# ---------------------------------------------------------
+# START WORK (the SLA response)
+# MAINTENANCE STAFF
+# ---------------------------------------------------------
+
+@router.post(
+    "/{ticket_id}/start",
+    response_model=TicketResponse
+)
+def start_ticket_endpoint(
+    ticket_id: int,
+    current_user=Depends(get_current_user)
+):
+    if current_user["role"] != "MAINTENANCE_STAFF":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only maintenance staff start work on tickets."
+        )
+
+    try:
+        ticket = get_ticket(ticket_id)
+
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc)
+        )
+
+    try:
+        routing = start_ticket(ticket, current_user)
+
+    except PermissionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(exc)
+        )
+
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc)
+        )
+
+    return ticket_to_response(ticket, routing)

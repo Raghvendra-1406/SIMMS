@@ -2,27 +2,34 @@ from services.temporal_processor import (
     add_observation,
 )
 
-from services.fan_service import (
-    evaluate_fan_status,
-)
-
-from services.light_service import (
-    evaluate_light_status,
-)
-
 from services.electrical_service import (
     evaluate_electrical_status,
+)
+
+from services.energy_service import (
+    evaluate_energy_wastage,
+)
+
+from services.circuit_service import (
+    get_latest_electrical,
+)
+
+from services.unit_service import (
+    UNIT_KINDS,
+    evaluate_units,
 )
 
 from services.board_service import (
     evaluate_board_status,
 )
 
-from services.fault_detector import (
-    FAULT_FAN_FAILURE,
-    FAULT_LIGHTS_LEFT_ON,
+from services.fault_types import (
     FAULT_ELECTRICAL_ABNORMALITY,
+    FAULT_ENERGY_WASTAGE,
     FAULT_BOARD_NEEDS_CLEANING,
+)
+
+from services.fault_detector import (
     get_active_fault,
     create_confirmed_fault,
 )
@@ -41,6 +48,10 @@ from database.connection import (
 
 from config.settings import (
     COOLDOWN_MINUTES,
+)
+
+from services.routing_service import (
+    has_started,
 )
 
 from database.repositories.fault_repository import (
@@ -78,7 +89,9 @@ def handle_confirmed_fault(
     fault_type,
     room_id,
     device_id,
-    abnormal_count
+    abnormal_count,
+    details=None,
+    detected_at=None
 ):
     """
     Turn a temporally confirmed fault into a fault event and ticket.
@@ -167,7 +180,9 @@ def handle_confirmed_fault(
             fault_type=fault_type,
             confidence=100.0,
             abnormal_count=abnormal_count,
-            recurrence_type=recurrence["classification"]
+            recurrence_type=recurrence["classification"],
+            details=details,
+            detected_at=detected_at
         )
 
         return {
@@ -218,7 +233,9 @@ def handle_recovered_fault(
             None
         )
 
-        if open_ticket is None:
+        # Someone already started work: not "untouched" any more,
+        # leave it to resolve + verification.
+        if open_ticket is None or has_started(open_ticket[0]):
             return None
 
         return {
@@ -237,7 +254,8 @@ def apply_observation(
     room_id,
     device_id,
     status,
-    is_abnormal
+    is_abnormal,
+    details=None
 ):
     """
     Shared flow for every detector after its condition is evaluated:
@@ -263,7 +281,9 @@ def apply_observation(
             fault_type=fault_type,
             room_id=room_id,
             device_id=device_id,
-            abnormal_count=temporal_result["abnormal_count"]
+            abnormal_count=temporal_result["abnormal_count"],
+            details=details,
+            detected_at=temporal_result["onset_at"]
         )
 
     elif temporal_result["newly_recovered"]:
@@ -304,95 +324,138 @@ def not_processed():
     }
 
 
-def process_fan_observation(
-    room_id,
-    device_id
-):
-    """
-    Fan failure: current flowing but the fan is not rotating.
-    """
-
-    status = evaluate_fan_status(
-        room_id=room_id,
-        device_id=device_id
-    )["status"]
-
-    if status == "FAILURE_CANDIDATE":
-        is_abnormal = True
-
-    elif status in {"WORKING", "OFF", "ABNORMAL"}:
-        is_abnormal = False
-
-    else:
-        return not_processed()
-
-    return apply_observation(
-        fault_type=FAULT_FAN_FAILURE,
-        room_id=room_id,
-        device_id=device_id,
-        status=status,
-        is_abnormal=is_abnormal
-    )
-
-
-def process_light_observation(
-    room_id
-):
-    """
-    Lights left on: light ON while the room has been vacant for
-    VACANCY_MINUTES.
-    """
-
-    status = evaluate_light_status(
-        room_id=room_id
-    )["status"]
-
-    if status == "WASTAGE_CANDIDATE":
-        is_abnormal = True
-
-    elif status == "NORMAL":
-        is_abnormal = False
-
-    else:
-        return not_processed()
-
-    return apply_observation(
-        fault_type=FAULT_LIGHTS_LEFT_ON,
-        room_id=room_id,
-        device_id=None,
-        status=status,
-        is_abnormal=is_abnormal
-    )
-
-
 def process_electrical_observation(
     room_id
 ):
     """
-    Electrical abnormality: voltage, current, power or power factor
-    outside the allowed range.
+    A new circuit reading drives two room-level checks:
+
+    - electrical abnormality (supply voltage, overcurrent per circuit,
+      power factor)
+    - energy wastage (lights / fans powered in a vacant room)
     """
 
-    status = evaluate_electrical_status(
-        room_id=room_id
-    )["status"]
+    electrical_data = get_latest_electrical(room_id)
 
-    if status == "ABNORMALITY_CANDIDATE":
-        is_abnormal = True
+    results = {}
 
-    elif status == "NORMAL":
-        is_abnormal = False
+    electrical = evaluate_electrical_status(
+        room_id=room_id,
+        electrical_data=electrical_data
+    )
+
+    if electrical["status"] == "UNKNOWN":
+        results["electrical"] = not_processed()
 
     else:
-        return not_processed()
+        results["electrical"] = apply_observation(
+            fault_type=FAULT_ELECTRICAL_ABNORMALITY,
+            room_id=room_id,
+            device_id=None,
+            status=electrical["status"],
+            is_abnormal=electrical["status"] == "ABNORMALITY_CANDIDATE",
+            details={"abnormal": electrical["abnormal_fields"]}
+        )
 
-    return apply_observation(
-        fault_type=FAULT_ELECTRICAL_ABNORMALITY,
+    wastage = evaluate_energy_wastage(
+        room_id=room_id,
+        electrical_data=electrical_data
+    )
+
+    if wastage["status"] == "UNKNOWN":
+        results["energy"] = not_processed()
+
+    else:
+        results["energy"] = apply_observation(
+            fault_type=FAULT_ENERGY_WASTAGE,
+            room_id=room_id,
+            device_id=None,
+            status=wastage["status"],
+            is_abnormal=wastage["status"] == "WASTAGE_CANDIDATE",
+            details=wastage
+        )
+
+    return results
+
+
+def process_unit_observations(
+    room_id,
+    kind
+):
+    """
+    New camera readings for every fan (kind FAN) or tube light
+    (kind LIGHT) in the room.
+
+    Each unit gets its own vote:
+      working                      -> normal
+      not working, pinpointed      -> abnormal (that unit has failed)
+      not working, not suspected   -> normal (switched off)
+      ambiguous / not visible      -> no vote
+
+    When the circuit shows a failed unit but the camera cannot tell
+    which of several stopped units it is, a room-level fault
+    (device None) is raised instead, naming the candidates.
+    """
+
+    config = UNIT_KINDS[kind]
+    fault_type = config["fault_type"]
+
+    result = evaluate_units(room_id, kind)
+
+    if result["status"] in {"UNKNOWN", "NO_VISION"}:
+        return {"summary": result["summary"], "status": result["status"], "units": {}}
+
+    details = {
+        "summary": result["summary"],
+        "circuit": config["circuit"],
+        "circuit_current": result["circuit"]["current"],
+        "powered_units": result["powered_units"],
+        "working_units": len(result["working"]),
+        "suspects": [result["names"][d] for d in result["suspects"]],
+    }
+
+    unit_results = {}
+
+    for device_id, state in result["unit_states"].items():
+        if state is True:
+            is_abnormal = False
+
+        elif device_id in result["suspects"]:
+            if not result["pinpointed"]:
+                continue
+            is_abnormal = True
+
+        elif state is False:
+            is_abnormal = False
+
+        else:
+            continue
+
+        unit_results[device_id] = apply_observation(
+            fault_type=fault_type,
+            room_id=room_id,
+            device_id=device_id,
+            status="FAILURE_CANDIDATE" if is_abnormal else "NORMAL",
+            is_abnormal=is_abnormal,
+            details={**details, "unit": result["names"][device_id]}
+        )
+
+    ambiguous = result["status"] == "FAULT" and not result["pinpointed"]
+
+    unit_results[None] = apply_observation(
+        fault_type=fault_type,
         room_id=room_id,
         device_id=None,
-        status=status,
-        is_abnormal=is_abnormal
+        status="AMBIGUOUS_FAILURE" if ambiguous else "NORMAL",
+        is_abnormal=ambiguous,
+        details=details
     )
+
+    return {
+        "summary": result["summary"],
+        "status": result["status"],
+        "units": unit_results,
+    }
 
 
 def process_board_observation(

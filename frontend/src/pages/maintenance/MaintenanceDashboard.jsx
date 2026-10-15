@@ -14,7 +14,8 @@ import { statusTone } from "../../lib/format";
 import { navigateTo } from "../../lib/session";
 import { usePolling } from "../../lib/usePolling";
 
-const API_BASE_URL = "http://localhost:8000";
+// Backend URL: VITE_API_BASE_URL at build time (see lib/api.js).
+import { API_BASE_URL } from "../../lib/api";
 
 // CRITICAL is not part of the shared tone map, so resolve priority tones here.
 function priorityTone(priority) {
@@ -95,7 +96,7 @@ function MaintenanceDashboard() {
         classroomsResponse,
         faultsResponse,
       ] = await Promise.all([
-        fetch(`${API_BASE_URL}/tickets/open`, {
+        fetch(`${API_BASE_URL}/tickets/open?mine=true`, {
           headers,
         }),
         fetch(`${API_BASE_URL}/classrooms`, {
@@ -586,8 +587,8 @@ function MaintenanceDashboard() {
                 <span
                   className={`flex h-8 w-8 items-center justify-center rounded-lg ${
                     step.active
-                      ? "bg-brand-600 text-white"
-                      : "bg-white text-slate-500 ring-1 ring-slate-200"
+                      ? "bg-primary text-white"
+                      : "bg-surface text-slate-500 ring-1 ring-slate-200"
                   }`}
                 >
                   <Icon name={step.icon} className="h-4 w-4" />

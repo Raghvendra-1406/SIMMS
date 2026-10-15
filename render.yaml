@@ -1,0 +1,70 @@
+# Render Blueprint: the SIMMS backend (FastAPI + MQTT subscriber +
+# scheduler) as one always-running web service.
+#
+# Create it from the Render dashboard: New -> Blueprint -> this repo.
+# Secrets marked "sync: false" are asked for once in the dashboard.
+# Deploys are triggered by .github/workflows/deploy.yml after the
+# checks pass (autoDeploy is off).
+services:
+  - type: web
+    name: simms-backend
+    runtime: python
+    plan: free
+    region: singapore          # close to the Neon database (ap-southeast-1)
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    # One process only: confirmation windows live in memory.
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    autoDeploy: false
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+
+      # Database (Neon connection string)
+      - key: DATABASE_URL
+        sync: false
+
+      # Auth
+      - key: JWT_SECRET_KEY
+        generateValue: true
+      - key: JWT_ALGORITHM
+        value: HS256
+      - key: JWT_EXPIRE_MINUTES
+        value: "60"
+
+      # Hosted MQTT broker (HiveMQ Cloud: port 8883 + TLS)
+      - key: MQTT_BROKER_HOST
+        sync: false
+      - key: MQTT_BROKER_PORT
+        value: "8883"
+      - key: MQTT_TLS
+        value: "1"
+      - key: MQTT_USERNAME
+        sync: false
+      - key: MQTT_PASSWORD
+        sync: false
+      - key: MQTT_TOPIC_PREFIX
+        value: ""
+
+      # Dashboard origins allowed to call the API
+      - key: CORS_ORIGINS
+        sync: false            # e.g. https://simms.vercel.app
+      # Optional: also allow this project's Vercel preview URLs,
+      # e.g. https://simms-frontend-.*\.vercel\.app
+      - key: CORS_ORIGIN_REGEX
+        sync: false
+
+      # Detection rules (Plan v2 defaults; use 1 / 2 for quick dry runs)
+      - key: VACANCY_MINUTES
+        value: "10"
+      - key: COOLDOWN_MINUTES
+        value: "30"
+      - key: POST_REPAIR_VERIFICATION_HOURS
+        value: "24"
+      - key: NODE_OFFLINE_SECONDS
+        value: "90"
+      - key: HEALTH_INTERVAL_SECONDS
+        value: "60"
+      - key: DB_POOL_MAX
+        value: "5"

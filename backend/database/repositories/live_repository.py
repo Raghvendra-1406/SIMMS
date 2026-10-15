@@ -80,6 +80,31 @@ SELECT json_build_object(
           AND UPPER(d.device_type) = 'FAN'
     ), '[]'::json),
 
+    'lights', COALESCE((
+        SELECT json_agg(
+            json_build_object(
+                'device_id', d.device_id,
+                'device_name', d.device_name,
+                'status', d.status,
+                'last_seen', d.last_seen,
+                'data', f.observation_data,
+                'observed_at', f.observed_at
+            )
+            ORDER BY d.device_id
+        )
+        FROM devices d
+        LEFT JOIN LATERAL (
+            SELECT observation_data, observed_at
+            FROM vision_observations v
+            WHERE v.device_id = d.device_id
+              AND v.observation_type = 'LIGHT'
+            ORDER BY v.observed_at DESC
+            LIMIT 1
+        ) f ON TRUE
+        WHERE d.room_id = r.room_id
+          AND UPPER(d.device_type) = 'LIGHT'
+    ), '[]'::json),
+
     'nodes', COALESCE((
         SELECT json_agg(
             json_build_object(
@@ -105,7 +130,12 @@ SELECT json_build_object(
                 'fault_type', fe.fault_type,
                 'device_id', fe.device_id,
                 'status', fe.status,
-                'detected_at', fe.detected_at
+                'detected_at', fe.detected_at,
+                'device_name', (
+                    SELECT device_name FROM devices
+                    WHERE device_id = fe.device_id
+                ),
+                'details', fe.details
             )
             ORDER BY fe.detected_at DESC
         )
