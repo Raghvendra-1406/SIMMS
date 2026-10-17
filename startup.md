@@ -221,6 +221,25 @@ python -m models.vision_runtime --room-name R101 --source 0 --interval 30 --show
 - The camera machine needs this `.env` (for the database and the broker).
 - While the real camera runs, turn off the Wokwi virtual camera (switch 3).
 
+## 10. Running the tests
+
+The backend has a pytest suite (`backend/tests`) covering the confirmation window, the fault pipeline, routing and response SLA, offline buffering, Device offline, Web Push, the energy report, the health score and the API's role checks.
+
+```powershell
+cd backend
+.venv\Scriptsctivate
+pip install -r requirements-dev.txt
+python -m pytest
+```
+
+It runs against a **throwaway PostgreSQL**, never your real database:
+
+- By default it starts an embedded PostgreSQL (`pgserver`) in a temporary folder and deletes it afterwards.
+- Or set `TEST_DATABASE_URL` to a local PostgreSQL database you don't mind being wiped.
+- It refuses to run against anything that isn't `localhost`, and it doesn't read `backend/.env`.
+
+GitHub Actions runs the same suite on every push and pull request (with a PostgreSQL service container). Deploys only happen when it passes.
+
 ## Common problems
 
 | Problem | Fix |

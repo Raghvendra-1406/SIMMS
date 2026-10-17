@@ -55,7 +55,7 @@ class VisionRuntime:
         fan_gap_seconds=0.15,
         camera_width=1280,
         camera_height=720,
-        person_model_path="yolo11n.pt",
+        person_model_path=None,
         person_confidence=0.5,
         fan_motion_threshold=0.05,
         show=False,
@@ -420,7 +420,9 @@ def main():
                         help="seconds between cycles (Plan v2: 30-60)")
     parser.add_argument("--fan-gap", type=float, default=0.15,
                         help="seconds between the two fan frames")
-    parser.add_argument("--model", default="yolo11n.pt")
+    parser.add_argument("--model", default=None,
+                        help="person model: .onnx (onnxruntime, default "
+                             "models/weights/yolo11n.onnx) or .pt (ultralytics)")
     parser.add_argument("--confidence", type=float, default=0.5)
     parser.add_argument("--show", action="store_true",
                         help="debug window with detections drawn")
