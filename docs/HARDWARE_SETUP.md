@@ -261,8 +261,8 @@ scp simms_pi@simms.local:~/SIMMS/backend/snap.jpg .
 
 ### 3.9 Add another Wi-Fi network (keeps the hotspot as backup)
 ```bash
-sudo nmcli con add type wifi ifname wlan0 con-name home ssid "Ghatotkach" \
-  wifi-sec.key-mgmt wpa-psk wifi-sec.psk "brahminnavhta" \
+sudo nmcli con add type wifi ifname wlan0 con-name home ssid "NewWiFiName" \
+  wifi-sec.key-mgmt wpa-psk wifi-sec.psk "NewWiFiPassword" \
   wifi.powersave 2 connection.autoconnect-priority 10
 nmcli con show
 sudo nmcli con up home        # switch now (SSH freezes; reconnect on the new network)
@@ -274,7 +274,22 @@ sudo shutdown -h now          # wait for the green LED to stop, then unplug
 sudo reboot
 ```
 
-### 3.11 Make the SD card read-only (for the 7-day run and demo, after everything works)
+### 3.11 Start the camera automatically at boot (systemd service)
+The camera program then runs without SSH: it starts at boot, retries until Wi-Fi and the database are reachable, and restarts if it crashes. It re-reads the calibration every 5 minutes, so boxes redrawn on the dashboard reach the Pi without a restart.
+```bash
+bash ~/SIMMS/backend/scripts/pi/install_camera_service.sh R101 0 30    # room, camera source, seconds per cycle
+```
+| Task | Command |
+|---|---|
+| Running? | `systemctl status simms-camera` |
+| Live log (shows the ms per cycle) | `journalctl -u simms-camera -f` (Ctrl+C stops watching) |
+| After `git pull` or a `.env` change | `sudo systemctl restart simms-camera` |
+| Stop it (e.g. for a manual test) | `sudo systemctl stop simms-camera` |
+| Remove the autostart | `sudo systemctl disable --now simms-camera` |
+
+Test it: `sudo reboot`, wait 2 minutes **without logging in**, and check that the dashboard shows **Camera: Online**.
+
+### 3.12 Make the SD card read-only (for the 7-day run and demo, after everything works)
 Stops all writes to the card so it can't be corrupted. Changes made while it's on are lost at reboot.
 ```bash
 sudo raspi-config             # Performance Options -> Overlay File System -> Yes (also make boot read-only: Yes)
@@ -335,7 +350,7 @@ dmesg | grep -iE "ext4|mmc|I/O error" | tail -20
   If the errors persist, or `sudo dpkg --verify` shows a parsing error, **re-flash**.
 - **`mmc` or `I/O error`:** the card is failing. Test it on the laptop with **H2testw** (Write + Verify).
 - Work around a folder that won't delete: `mv ~/.cache/pip ~/.cache/pip-broken`
-- Prevention: weak power under load is the prime suspect. Watch `watch -n 2 vcgencmd get_throttled` during installs, always shut down properly, and turn on the read-only mode (3.11) for long runs.
+- Prevention: weak power under load is the prime suspect. Watch `watch -n 2 vcgencmd get_throttled` during installs, always shut down properly, and turn on the read-only mode (3.12) for long runs.
 
 ### 4.5 Under-voltage
 `vcgencmd get_throttled` showing anything other than `0x0` (for example `0x50000` or `0x50005`) means the voltage dropped. Use a different **5V⎓3A USB-C** charger, or a shorter, thicker cable.

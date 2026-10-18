@@ -227,7 +227,7 @@ The backend has a pytest suite (`backend/tests`) covering the confirmation windo
 
 ```powershell
 cd backend
-.venv\Scriptsctivate
+.venv\Scripts\Activate
 pip install -r requirements-dev.txt
 python -m pytest
 ```
