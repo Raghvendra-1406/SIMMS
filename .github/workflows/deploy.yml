@@ -121,6 +121,9 @@ jobs:
 
       - run: pip install platformio
 
+      # secrets.h is git-ignored; the hw build needs it to compile.
+      - run: cp src/secrets.example.h src/secrets.h
+
       - run: pio run -e sim -e hw
 
   deploy-frontend:
