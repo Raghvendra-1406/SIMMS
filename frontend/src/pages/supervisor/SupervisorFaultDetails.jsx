@@ -50,6 +50,7 @@ function getFaultTypeLabel(faultType) {
     BOARD_NEEDS_CLEANING: "Board needs cleaning",
     ELECTRICAL_ABNORMALITY:
       "Electrical abnormality",
+    DEVICE_OFFLINE: "Device offline",
   };
 
   return (
@@ -69,6 +70,7 @@ const FAULT_TYPE_META = {
   ENERGY_WASTAGE: { icon: "zap", tone: "warning" },
   BOARD_NEEDS_CLEANING: { icon: "clipboard", tone: "info" },
   ELECTRICAL_ABNORMALITY: { icon: "zap", tone: "danger" },
+  DEVICE_OFFLINE: { icon: "wifiOff", tone: "warning" },
 };
 
 function getFaultTypeMeta(faultType) {

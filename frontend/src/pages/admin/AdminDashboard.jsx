@@ -39,9 +39,9 @@ function formatDate(value) {
   return date.toLocaleString();
 }
 
+// Plan v2 §10 bands: normal 85-100, warning 60-84, critical below 60.
 const HEALTH_SEGMENTS = [
-  { key: "excellent", label: "Excellent", bar: "bg-emerald-500", text: "text-emerald-700" },
-  { key: "good", label: "Good", bar: "bg-green-400", text: "text-green-700" },
+  { key: "normal", label: "Normal", bar: "bg-emerald-500", text: "text-emerald-700" },
   { key: "warning", label: "Warning", bar: "bg-amber-400", text: "text-amber-700" },
   { key: "critical", label: "Critical", bar: "bg-red-500", text: "text-red-700" },
 ];
@@ -238,12 +238,9 @@ export default function AdminDashboard() {
 
   const healthSummary = useMemo(() => {
     return {
-      excellent: healthScores.filter(
-        (item) => item.health_status === "EXCELLENT"
-      ).length,
-
-      good: healthScores.filter(
-        (item) => item.health_status === "GOOD"
+      // EXCELLENT / GOOD: scores stored before the CIHS formula.
+      normal: healthScores.filter((item) =>
+        ["NORMAL", "EXCELLENT", "GOOD"].includes(item.health_status)
       ).length,
 
       warning: healthScores.filter(
@@ -389,7 +386,7 @@ export default function AdminDashboard() {
             >
               {/* Distribution */}
               <div className="border-b border-slate-100 px-5 py-4">
-                <div className="flex h-2.5 w-full overflow-hidden rounded-full bg-slate-100" role="img" aria-label={`Health distribution: ${healthSummary.excellent} excellent, ${healthSummary.good} good, ${healthSummary.warning} warning, ${healthSummary.critical} critical`}>
+                <div className="flex h-2.5 w-full overflow-hidden rounded-full bg-slate-100" role="img" aria-label={`Health distribution: ${healthSummary.normal} normal, ${healthSummary.warning} warning, ${healthSummary.critical} critical`}>
                   {HEALTH_SEGMENTS.map((segment) =>
                     healthSummary[segment.key] > 0 ? (
                       <div

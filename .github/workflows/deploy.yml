@@ -54,11 +54,27 @@ jobs:
       - run: npm run build
 
   backend:
-    name: Backend checks
+    name: Backend checks + tests
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: backend
+    # Throwaway database for the test suite (schema.sql is applied by
+    # tests/conftest.py); never the real one.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: simms_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
 
@@ -66,9 +82,11 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
-          cache-dependency-path: backend/requirements.txt
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-dev.txt
 
-      - run: pip install -r requirements.txt
+      - run: pip install -r requirements.txt pytest==9.1.1 httpx==0.28.1
 
       - name: Compile all modules
         run: python -m compileall -q .
@@ -77,6 +95,11 @@ jobs:
         env:
           JWT_SECRET_KEY: ci-only-not-a-secret
         run: python -c "import main; print(len(main.app.routes), 'routes')"
+
+      - name: Test suite
+        env:
+          TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/simms_test
+        run: python -m pytest
 
   firmware:
     name: Firmware build (sim + hw)

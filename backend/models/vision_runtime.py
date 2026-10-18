@@ -25,6 +25,10 @@ from services.vision_calibration_service import (
 # OFFLINE (Plan v2 §16 T17: "within two cycles").
 OFFLINE_AFTER_FAILURES = 2
 
+# Re-read the active calibration this often, so boxes redrawn on the
+# admin Calibration page reach an unattended Pi without a restart.
+CALIBRATION_REFRESH_SECONDS = 300
+
 
 class VisionRuntime:
     """
@@ -55,7 +59,7 @@ class VisionRuntime:
         fan_gap_seconds=0.15,
         camera_width=1280,
         camera_height=720,
-        person_model_path="yolo11n.pt",
+        person_model_path=None,
         person_confidence=0.5,
         fan_motion_threshold=0.05,
         show=False,
@@ -139,6 +143,26 @@ class VisionRuntime:
             return None
 
         return self.calibration["calibration_version"]
+
+    def refresh_calibration(self):
+        """
+        Reload the calibration; keep the current one if the database
+        is unreachable.
+        """
+
+        previous = self.calibration_version
+
+        try:
+            self.load_calibration()
+        except Exception as exc:
+            print(f"Calibration refresh failed, keeping version {previous}: {exc!r}")
+            return
+
+        if self.calibration_version != previous:
+            print(
+                f"Calibration updated: version {previous} -> "
+                f"{self.calibration_version}."
+            )
 
     def start(self):
         self.load_calibration()
@@ -309,11 +333,16 @@ class VisionRuntime:
 
         failures = 0
         cycles = 0
+        calibration_loaded_at = time.monotonic()
 
         try:
             while max_cycles == 0 or cycles < max_cycles:
                 cycle_started = time.monotonic()
                 cycles += 1
+
+                if cycle_started - calibration_loaded_at >= CALIBRATION_REFRESH_SECONDS:
+                    self.refresh_calibration()
+                    calibration_loaded_at = cycle_started
 
                 try:
                     result, frame, persons = self.process_frame()
@@ -341,6 +370,12 @@ class VisionRuntime:
                 failures = 0
 
                 self.publisher.publish_vision_result(result)
+
+                if self.publisher.buffered_count:
+                    print(
+                        f"Broker unreachable: "
+                        f"{self.publisher.buffered_count} observations buffered."
+                    )
 
                 self.publisher.publish_status(
                     True,
@@ -414,7 +449,9 @@ def main():
                         help="seconds between cycles (Plan v2: 30-60)")
     parser.add_argument("--fan-gap", type=float, default=0.15,
                         help="seconds between the two fan frames")
-    parser.add_argument("--model", default="yolo11n.pt")
+    parser.add_argument("--model", default=None,
+                        help="person model: .onnx (onnxruntime, default "
+                             "models/weights/yolo11n.onnx) or .pt (ultralytics)")
     parser.add_argument("--confidence", type=float, default=0.5)
     parser.add_argument("--show", action="store_true",
                         help="debug window with detections drawn")

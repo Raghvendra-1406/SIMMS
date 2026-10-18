@@ -14,6 +14,7 @@ from database.repositories.stats_repository import (
 )
 
 from services.stats_service import get_overview
+from services.energy_report_service import get_energy_report
 from services.ticket_service import get_ticket
 
 
@@ -43,6 +44,34 @@ def stats_overview(
 ):
     try:
         return get_overview(
+            days=days,
+            start=start,
+            end=end,
+            room_id=room_id,
+            tz_offset_minutes=tz_offset_minutes
+        )
+
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc)
+        )
+
+
+# ---------------------------------------------------------
+# ENERGY WASTED IN EMPTY ROOMS (Plan v2 C5)
+# ---------------------------------------------------------
+
+@router.get("/energy")
+def stats_energy(
+    days: float = Query(default=7, gt=0, le=90),
+    start: Optional[datetime] = None,
+    end: Optional[datetime] = None,
+    room_id: Optional[int] = None,
+    tz_offset_minutes: int = Query(default=0, ge=-840, le=840),
+):
+    try:
+        return get_energy_report(
             days=days,
             start=start,
             end=end,

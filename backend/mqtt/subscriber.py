@@ -3,9 +3,12 @@ import queue
 import threading
 import time
 import uuid
+from datetime import datetime, timedelta, timezone
+
 import paho.mqtt.client as mqtt
 
 from config.settings import (
+    LIVE_READING_MAX_AGE_SECONDS,
     MQTT_BROKER_HOST,
     MQTT_BROKER_PORT,
     MQTT_CLIENT_ID,
@@ -62,6 +65,8 @@ METADATA_KEYS = {
     "device_name",
     "node_id",
     "timestamp",
+    "age_s",
+    "buffered",
 }
 
 NODE_STATES = {"ONLINE", "OFFLINE"}
@@ -111,6 +116,48 @@ def _should_write(key):
     _last_seen_written[key] = now
 
     return True
+
+
+def observed_time(payload):
+    """
+    When the reading was taken: the payload "timestamp" (ISO 8601),
+    else now minus "age_s" (nodes without a clock replaying buffered
+    readings), else now.
+    """
+
+    now = datetime.now(timezone.utc)
+
+    stamp = payload.get("timestamp")
+
+    if stamp:
+        try:
+            parsed = datetime.fromisoformat(str(stamp).replace("Z", "+00:00"))
+
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+
+            # A node clock ahead of the server is clamped to now.
+            return min(parsed, now)
+
+        except ValueError:
+            log(f"Ignoring unparseable timestamp {stamp!r}.")
+
+    age = payload.get("age_s")
+
+    if isinstance(age, (int, float)) and age > 0:
+        return now - timedelta(seconds=age)
+
+    return now
+
+
+def is_live(observed_at):
+    """
+    Only readings taken recently vote in fault confirmation.
+    """
+
+    age = (datetime.now(timezone.utc) - observed_at).total_seconds()
+
+    return age <= LIVE_READING_MAX_AGE_SECONDS
 
 
 def resolve_device_id(room_id, payload):
@@ -240,15 +287,21 @@ def process_sensor_message(room, payload):
 
     device_id = resolve_device_id(room_id, payload)
 
+    observed_at = observed_time(payload)
+
     create_sensor_observation(
         room_id=room_id,
         device_id=device_id,
-        observed_at=payload.get("timestamp"),
+        observed_at=observed_at,
         observation_type=observation_type,
         observation_data=observation_data
     )
 
     mark_seen(room_id, device_id, payload.get("node_id"))
+
+    # Replayed (buffered) readings are history only.
+    if not is_live(observed_at):
+        return
 
     # A new ELECTRICAL observation (all circuits of the room) is one
     # observation cycle for the electrical-abnormality and
@@ -303,6 +356,8 @@ def process_unit_batch(room, payload, batch_key):
     rows = []
     device_ids = []
 
+    observed_at = observed_time(payload)
+
     for entry in entries:
         if not isinstance(entry, dict):
             continue
@@ -326,7 +381,7 @@ def process_unit_batch(room, payload, batch_key):
         rows.append((
             room_id,
             device_id,
-            payload.get("timestamp"),
+            observed_at,
             observation_type,
             data,
         ))
@@ -336,6 +391,9 @@ def process_unit_batch(room, payload, batch_key):
     create_vision_observations_bulk(rows)
 
     mark_seen(room_id, None, payload.get("node_id"), device_ids)
+
+    if not is_live(observed_at):
+        return
 
     report_units(room, kind, process_unit_observations(room_id, kind))
 
@@ -374,15 +432,20 @@ def process_vision_message(room, payload):
         )
         return
 
+    observed_at = observed_time(payload)
+
     create_vision_observation(
         room_id=room_id,
         device_id=device_id,
-        observed_at=payload.get("timestamp"),
+        observed_at=observed_at,
         observation_type=observation_type,
         observation_data=observation_data
     )
 
     mark_seen(room_id, device_id, payload.get("node_id"))
+
+    if not is_live(observed_at):
+        return
 
     # A new BOARD / FAN_MOTION observation is one observation
     # cycle for its temporal processor (4-of-5 rule).

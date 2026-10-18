@@ -131,6 +131,31 @@ NODE_OFFLINE_SECONDS = int(
     )
 )
 
+# Classroom Infrastructure Health Score (Plan v2 §10):
+#   CIHS = 100 - sum(weight x penalty), each penalty 0-100.
+# The plan's furniture term is not built (no furniture detection);
+# its weight goes to monitoring coverage (node / camera online).
+# Weights should add up to 1; tune them with the maintenance staff.
+def _parse_weights(text):
+    weights = {}
+
+    for part in text.split(","):
+        if "=" in part:
+            name, value = part.split("=", 1)
+            weights[name.strip()] = float(value)
+
+    return weights
+
+
+HEALTH_WEIGHTS = _parse_weights(os.getenv(
+    "HEALTH_WEIGHTS",
+    "electrical=0.40,monitoring=0.20,board=0.15,maintenance=0.25"
+))
+
+# Plan v2 §10 bands: >= NORMAL_MIN normal, >= WARNING_MIN warning.
+HEALTH_NORMAL_MIN = float(os.getenv("HEALTH_NORMAL_MIN", "85"))
+HEALTH_WARNING_MIN = float(os.getenv("HEALTH_WARNING_MIN", "60"))
+
 # How often classroom health scores are recalculated.
 HEALTH_INTERVAL_SECONDS = int(
     os.getenv(
@@ -188,6 +213,55 @@ SLA_HOURS = {
 }
 
 SLA_CHECK_INTERVAL_SECONDS = int(os.getenv("SLA_CHECK_INTERVAL_SECONDS", "60"))
+
+
+# ---------------------------------------------------------
+# BUFFERED READINGS (Plan v2 §16 T12)
+#
+# Nodes keep readings while offline and replay them on reconnect.
+# A reading older than this is stored (history, completeness) but
+# does not vote in fault confirmation: stale data must not raise or
+# clear tickets after the fact.
+# ---------------------------------------------------------
+
+LIVE_READING_MAX_AGE_SECONDS = int(os.getenv("LIVE_READING_MAX_AGE_SECONDS", "90"))
+
+# A sensor node or camera offline this long raises DEVICE_OFFLINE.
+DEVICE_OFFLINE_FAULT_MINUTES = float(os.getenv("DEVICE_OFFLINE_FAULT_MINUTES", "5"))
+
+
+# ---------------------------------------------------------
+# ENERGY REPORT (Plan v2 C5: energy wasted in empty rooms)
+#
+# Tariff and grid emission factor turn kWh into money and CO2.
+# Defaults: a typical Indian institutional tariff and the CEA grid
+# emission factor (~0.71 kg CO2 / kWh); set your own in .env.
+# ---------------------------------------------------------
+
+TARIFF_PER_KWH = float(os.getenv("TARIFF_PER_KWH", "8.0"))
+CURRENCY_SYMBOL = os.getenv("CURRENCY_SYMBOL", "₹")
+GRID_EMISSION_KG_PER_KWH = float(os.getenv("GRID_EMISSION_KG_PER_KWH", "0.71"))
+
+# Meter readings further apart than this are a gap (node offline):
+# the time between them is not integrated, it is reported as unknown.
+ENERGY_MAX_GAP_SECONDS = int(os.getenv("ENERGY_MAX_GAP_SECONDS", "120"))
+
+# An occupancy count older than this no longer tells whether the room
+# is in use (camera offline): that energy counts as unknown.
+OCCUPANCY_MAX_AGE_MINUTES = float(os.getenv("OCCUPANCY_MAX_AGE_MINUTES", "5"))
+
+
+# ---------------------------------------------------------
+# WEB PUSH (Plan v2 C8, T16)
+#
+# Generate a key pair once with:  python -m scripts.generate_vapid_keys
+# Empty keys disable push (in-app notifications still work).
+# VAPID_SUBJECT is a contact for the push services (mailto: or https:).
+# ---------------------------------------------------------
+
+VAPID_PUBLIC_KEY = os.getenv("VAPID_PUBLIC_KEY", "").strip()
+VAPID_PRIVATE_KEY = os.getenv("VAPID_PRIVATE_KEY", "").strip()
+VAPID_SUBJECT = os.getenv("VAPID_SUBJECT", "mailto:admin@simms.local").strip()
 
 
 # ---------------------------------------------------------

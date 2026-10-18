@@ -126,9 +126,10 @@ Slide a switch **to the right** to turn it on. Keyboard shortcuts work when the 
 | T9 | Maintenance marks the ticket **Resolved** while the fault is still present; supervisor verifies | Verification fails and the ticket is **Reopened** |
 | T10 | Clear the fault, then Resolved → supervisor verifies | Ticket **Closed**, with the full history on the ticket page |
 | T11 | Switch 2 on (person at board) | Board shows **Occluded**. The reading is skipped and never raises a ticket. |
-| T13 | Stop the simulation (■) | `esp32-R101` **OFFLINE** within ~25 s (last will), 90 s at most |
+| T12 | Stop Mosquitto (or turn the Wi-Fi hotspot off) for a few minutes, then start it again | The serial monitor shows readings being buffered, then `[buffer] replay complete`. The dashboard history fills the gap with readings at their real times. Replayed readings never raise or clear a ticket. |
+| T13 | Stop the simulation (■) | `esp32-R101` **OFFLINE** within ~25 s (last will), 90 s at most. After 5 min offline: a **Device offline** ticket (Medium, routed to General staff), auto-resolved when the node comes back |
 | T14 | Lights on, people > 0 | **No event** |
-| T17 | Switch 3 on (camera offline) | `vcam-R101` **OFFLINE**. Fan/tube tiles show *No camera*, and the per-unit checks pause instead of guessing. |
+| T17 | Switch 3 on (camera offline) | `vcam-R101` **OFFLINE**. Fan/tube tiles show *No camera*, and the per-unit checks pause instead of guessing. After 5 min: a **Device offline** ticket for the camera. |
 
 **Other behaviour:**
 - Health scores update every 60 s.
@@ -136,8 +137,7 @@ Slide a switch **to the right** to turn it on. Keyboard shortcuts work when the 
 - The fault's summary ("what was detected") appears on the Live monitor and the fault details page.
 
 **Not implemented yet:**
-- T12: buffering on the edge device during a network loss.
-- T15/T16: the offline app queue, Web Push and Telegram.
+- T15/T16: the offline app queue and Web Push (Telegram was dropped).
 - A tube or fan that fails *without drawing current* (burnt-out tube, open motor winding) looks the same as "switched off" to a circuit meter, so it can't be detected without per-unit switch sensing.
 
 ---

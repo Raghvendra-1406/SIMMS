@@ -148,6 +148,7 @@ SELECT json_build_object(
         SELECT json_build_object(
             'health_status', h.health_status,
             'health_score', h.health_score,
+            'components', h.components,
             'calculated_at', h.calculated_at
         )
         FROM health_scores h

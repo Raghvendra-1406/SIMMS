@@ -1,5 +1,6 @@
 from services.fault_types import (
     FAULT_BOARD_NEEDS_CLEANING,
+    FAULT_DEVICE_OFFLINE,
     FAULT_ELECTRICAL_ABNORMALITY,
     FAULT_ENERGY_WASTAGE,
     FAULT_FAN_FAILURE,
@@ -100,5 +101,11 @@ def current_condition(fault_type, room_id, device_id=None, purpose="detect"):
             None if status == "UNKNOWN" else status == "CLEANING_CANDIDATE",
             result,
         )
+
+    if fault_type == FAULT_DEVICE_OFFLINE:
+        # Imported here: device_health_service imports the pipeline.
+        from services.device_health_service import device_condition
+
+        return device_condition(room_id, device_id)
 
     raise ValueError("Unsupported fault type.")

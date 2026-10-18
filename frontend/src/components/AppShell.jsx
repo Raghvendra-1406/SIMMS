@@ -3,6 +3,7 @@ import { AnimatePresence, LayoutGroup, motion, useMotionValueEvent, useScroll } 
 import Icon from "./Icon";
 import ThemeToggle from "./ThemeToggle";
 import { logout } from "../lib/session";
+import { syncPushSubscription } from "../lib/push";
 import { DURATION, EASE_IN, EASE_OUT, SPRING_SNAPPY, SPRING_SOFT, revealContainer } from "../lib/motion";
 
 // Backend URL: VITE_API_BASE_URL at build time (see lib/api.js).
@@ -358,6 +359,18 @@ export default function AppShell({ title, eyebrow, backHref, actions, unreadCoun
 
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const [hasToggledCollapse, setHasToggledCollapse] = useState(false);
+
+  // Once per browser session: keep this device's push subscription
+  // registered for whoever is logged in (never prompts).
+  useEffect(() => {
+    try {
+      if (sessionStorage.getItem("simms.pushSynced")) return;
+      sessionStorage.setItem("simms.pushSynced", "1");
+    } catch {
+      // Storage unavailable: sync anyway.
+    }
+    syncPushSubscription();
+  }, []);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [fetchedUnread, setFetchedUnread] = useState(0);

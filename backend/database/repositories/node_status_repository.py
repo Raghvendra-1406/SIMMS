@@ -124,6 +124,33 @@ def mark_stale_nodes_offline(offline_after_seconds):
         conn.close()
 
 
+def get_all_nodes():
+    """
+    Every node's status as dicts (scheduler checks).
+    """
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute(f"""
+            SELECT {NODE_COLUMNS}
+            FROM node_status
+            ORDER BY room_id, node_id
+        """)
+
+        columns = [c[0] for c in cursor.description]
+
+        return [
+            dict(zip(columns, row))
+            for row in cursor.fetchall()
+        ]
+
+    finally:
+        cursor.close()
+        conn.close()
+
+
 def get_nodes_by_room(room_id):
     conn = get_connection()
     cursor = conn.cursor()

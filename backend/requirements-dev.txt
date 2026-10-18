@@ -1,0 +1,8 @@
+# Test suite (backend/tests). Install on top of requirements.txt:
+#   pip install -r requirements.txt -r requirements-dev.txt
+# Run from backend/:   python -m pytest
+pytest==9.1.1
+httpx==0.28.1
+# Embedded PostgreSQL for local runs. Not needed when TEST_DATABASE_URL
+# points at a local PostgreSQL (CI uses a postgres service container).
+pgserver==0.1.4

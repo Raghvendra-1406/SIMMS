@@ -102,6 +102,22 @@ unsigned long lastMqttAttemptMs = 0;
 // Set by commands / buttons: publish the new state now.
 bool reportNow = false;
 
+unsigned long lastWifiAttemptMs = 0;
+
+// Offline buffer: a ring of serialized sensor messages with the
+// millis() they were taken at. Replay adds "age_s" so the backend
+// can place each reading in time without a real-time clock.
+struct BufferedMessage {
+  String topic;
+  String payload;
+  unsigned long takenMs;
+};
+
+BufferedMessage offlineBuffer[BUFFER_CAPACITY];
+int bufferHead = 0;   // oldest entry
+int bufferCount = 0;
+unsigned long bufferDropped = 0;
+
 bool cameraWasOffline = false;
 
 
@@ -334,6 +350,65 @@ bool publishJson(const String &topic, JsonDocument &doc, bool retain = false) {
   return ok;
 }
 
+void bufferPush(const String &topic, JsonDocument &doc) {
+  if (bufferCount == BUFFER_CAPACITY) {
+    // Full: drop the oldest reading.
+    bufferHead = (bufferHead + 1) % BUFFER_CAPACITY;
+    bufferCount--;
+    bufferDropped++;
+  }
+
+  int slot = (bufferHead + bufferCount) % BUFFER_CAPACITY;
+
+  offlineBuffer[slot].topic = topic;
+  offlineBuffer[slot].payload = "";
+  serializeJson(doc, offlineBuffer[slot].payload);
+  offlineBuffer[slot].takenMs = millis();
+
+  bufferCount++;
+}
+
+// Publish now if connected, otherwise keep it for later.
+void sendOrBuffer(const String &topic, JsonDocument &doc) {
+  if (mqtt.connected() && publishJson(topic, doc)) {
+    return;
+  }
+
+  bufferPush(topic, doc);
+}
+
+// Replay a few buffered readings per loop pass, oldest first, so
+// reconnecting never blocks the loop or floods the broker.
+void flushBuffer() {
+  int sent = 0;
+
+  while (bufferCount > 0 && sent < BUFFER_FLUSH_PER_LOOP && mqtt.connected()) {
+    BufferedMessage &entry = offlineBuffer[bufferHead];
+
+    JsonDocument doc;
+
+    if (deserializeJson(doc, entry.payload) == DeserializationError::Ok) {
+      doc["age_s"] = (millis() - entry.takenMs) / 1000;
+      doc["buffered"] = true;
+
+      if (!publishJson(entry.topic, doc)) {
+        return;  // try again next pass
+      }
+    }
+
+    entry.topic = "";
+    entry.payload = "";
+    bufferHead = (bufferHead + 1) % BUFFER_CAPACITY;
+    bufferCount--;
+    sent++;
+
+    if (bufferCount == 0) {
+      Serial.printf("[buffer] replay complete (%lu dropped while offline)\n", bufferDropped);
+      bufferDropped = 0;
+    }
+  }
+}
+
 void publishNodeStatus() {
   JsonDocument doc;
 
@@ -344,6 +419,7 @@ void publishNodeStatus() {
   doc["fw_version"] = FW_VERSION;
   doc["ip"] = WiFi.localIP().toString();
   doc["simulation"] = (bool)SIMULATION;
+  doc["buffered"] = bufferCount;
 
   JsonObject relays = doc["relays"].to<JsonObject>();
   relays["lights"] = lightsRelayOn;
@@ -378,7 +454,7 @@ void publishSensors() {
     addCircuit(circuits, "LIGHTS", e.lights);
     addCircuit(circuits, "FANS", e.fans);
 
-    publishJson(SENSOR_TOPIC, doc);
+    sendOrBuffer(SENSOR_TOPIC, doc);
   } else {
     Serial.println("[sensor] no meter responding, electrical reading skipped");
   }
@@ -392,7 +468,7 @@ void publishSensors() {
     doc["temperature"] = roundf(climate.temperature * 10) / 10;
     doc["humidity"] = roundf(climate.humidity * 10) / 10;
     doc["light_level"] = readLightLevel();
-    publishJson(SENSOR_TOPIC, doc);
+    sendOrBuffer(SENSOR_TOPIC, doc);
   } else {
     Serial.println("[sensor] DHT read failed, environment reading skipped");
   }
@@ -617,10 +693,13 @@ void onMqttMessage(char *topic, byte *payload, unsigned int length) {
 // Connectivity
 // ---------------------------------------------------------
 
+// Boot: wait up to WIFI_BOOT_TIMEOUT_MS, then carry on sampling
+// (readings are buffered) and let maintainWifi() keep trying.
 void connectWifi() {
   Serial.printf("[wifi] connecting to %s", WIFI_SSID);
 
   WiFi.mode(WIFI_STA);
+  WiFi.setAutoReconnect(true);
 
   if (WIFI_CHANNEL > 0) {
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD, WIFI_CHANNEL);
@@ -628,12 +707,42 @@ void connectWifi() {
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   }
 
-  while (WiFi.status() != WL_CONNECTED) {
+  unsigned long started = millis();
+
+  while (WiFi.status() != WL_CONNECTED && millis() - started < WIFI_BOOT_TIMEOUT_MS) {
     delay(250);
     Serial.print(".");
   }
 
-  Serial.printf(" connected, IP %s\n", WiFi.localIP().toString().c_str());
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.printf(" connected, IP %s\n", WiFi.localIP().toString().c_str());
+  } else {
+    Serial.println(" not yet; sampling continues and readings are buffered");
+  }
+
+  lastWifiAttemptMs = millis();
+}
+
+// Never blocks: sampling keeps running while the network is down.
+void maintainWifi() {
+  static bool wasConnected = false;
+
+  bool connected = WiFi.status() == WL_CONNECTED;
+
+  if (connected != wasConnected) {
+    wasConnected = connected;
+
+    if (connected) {
+      Serial.printf("[wifi] reconnected, IP %s\n", WiFi.localIP().toString().c_str());
+    } else {
+      Serial.println("[wifi] lost; buffering readings");
+    }
+  }
+
+  if (!connected && millis() - lastWifiAttemptMs >= WIFI_RETRY_MS) {
+    lastWifiAttemptMs = millis();
+    WiFi.reconnect();
+  }
 }
 
 void connectMqtt() {
@@ -737,12 +846,9 @@ void setup() {
 }
 
 void loop() {
-  if (WiFi.status() != WL_CONNECTED) {
-    digitalWrite(PIN_MQTT_LED, LOW);
-    connectWifi();
-  }
+  maintainWifi();
 
-  if (!mqtt.connected()) {
+  if (WiFi.status() == WL_CONNECTED && !mqtt.connected()) {
     digitalWrite(PIN_MQTT_LED, LOW);
     connectMqtt();
   }
@@ -774,9 +880,18 @@ void loop() {
     updateDisplay();
   }
 
+  // Sensors are sampled whether or not the network is up; offline
+  // readings go to the buffer.
+  if (now - lastSensorMs >= SENSOR_INTERVAL_MS || lastSensorMs == 0) {
+    lastSensorMs = now;
+    publishSensors();
+  }
+
   if (!mqtt.connected()) {
     return;
   }
+
+  flushBuffer();
 
   if (reportNow) {
     reportNow = false;
@@ -784,11 +899,6 @@ void loop() {
     publishSensors();
     lastSensorMs = now;
     lastStatusMs = now;
-  }
-
-  if (now - lastSensorMs >= SENSOR_INTERVAL_MS || lastSensorMs == 0) {
-    lastSensorMs = now;
-    publishSensors();
   }
 
 #if VIRTUAL_CAMERA

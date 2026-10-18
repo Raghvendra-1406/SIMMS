@@ -1,0 +1,16 @@
+# Camera node on the Raspberry Pi: everything vision_runtime needs and
+# nothing else (~250 MB installed). No PyTorch / ultralytics / NVIDIA:
+# person detection runs the ONNX model in models/weights/yolo11n.onnx
+# with onnxruntime.
+#
+#     python3 -m venv .venv && source .venv/bin/activate
+#     pip install --no-cache-dir -r requirements-pi.txt
+#
+# (requirements-vision.txt is the full ultralytics stack, only needed
+# on a laptop to re-export or retrain the model.)
+onnxruntime
+opencv-python-headless
+numpy
+paho-mqtt==2.1.0
+psycopg2-binary==2.9.13
+python-dotenv==1.2.3

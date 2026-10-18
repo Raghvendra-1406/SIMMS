@@ -13,6 +13,7 @@ import {
     StatusBadge,
 } from "../../components/ui";
 import { formatLabel } from "../../lib/format";
+import PushNotificationsCard from "../../components/PushNotificationsCard";
 import { navigateTo } from "../../lib/session";
 
 // Backend URL: VITE_API_BASE_URL at build time (see lib/api.js).
@@ -327,6 +328,10 @@ export default function SupervisorNotifications() {
                     {error}
                 </Alert>
             )}
+
+            <div className="mb-6">
+                <PushNotificationsCard />
+            </div>
 
             <Card
                 title="Notification center"

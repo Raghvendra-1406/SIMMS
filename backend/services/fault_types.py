@@ -5,6 +5,7 @@ FAULT_LIGHT_FAILURE = "LIGHT_FAILURE"
 FAULT_ENERGY_WASTAGE = "ENERGY_WASTAGE"
 FAULT_ELECTRICAL_ABNORMALITY = "ELECTRICAL_ABNORMALITY"
 FAULT_BOARD_NEEDS_CLEANING = "BOARD_NEEDS_CLEANING"
+FAULT_DEVICE_OFFLINE = "DEVICE_OFFLINE"
 
 # No longer raised (replaced by ENERGY_WASTAGE); kept so older
 # records still display and verify.
@@ -16,6 +17,7 @@ FAULT_NAMES = {
     FAULT_ENERGY_WASTAGE: "Energy wastage",
     FAULT_ELECTRICAL_ABNORMALITY: "Electrical abnormality",
     FAULT_BOARD_NEEDS_CLEANING: "Board needs cleaning",
+    FAULT_DEVICE_OFFLINE: "Device offline",
     FAULT_LIGHTS_LEFT_ON: "Lights left on",
 }
 
@@ -26,6 +28,8 @@ FAULT_PRIORITIES = {
     FAULT_LIGHT_FAILURE: "MEDIUM",
     FAULT_ENERGY_WASTAGE: "MEDIUM",
     FAULT_BOARD_NEEDS_CLEANING: "LOW",
+    # Monitoring of the room is blind until it is back.
+    FAULT_DEVICE_OFFLINE: "MEDIUM",
     FAULT_LIGHTS_LEFT_ON: "LOW",
 }
 
