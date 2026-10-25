@@ -82,7 +82,7 @@ A potentiometer outputs 0–3.3 V depending on how far it is turned; the ESP32 r
 
 | | |
 |---|---|
-| **Pin** | Analog output (AO) on GPIO 36 (VP) |
+| **Pin** | Analog output (AO) on GPIO 36 (VP) in the simulation. Real hardware: DO (or AO) on GPIO 34 (D34) |
 | **Works by** | Its output voltage falls as light increases; the firmware flips that into a 0–100 % `light_level` |
 | **Purpose** | Room light level shown on the Live monitor (context only; no rule depends on it) |
 

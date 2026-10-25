@@ -125,7 +125,7 @@ All modules use **3V3 and GND** from the ESP32. Share them on a breadboard rail.
 | | OUT / DATA | **D15** (GPIO15) |
 | LDR (3-pin, digital) | VCC | 3V3 |
 | | GND | GND |
-| | **DO** | **VP** (GPIO36) |
+| | **DO** | **D34** (GPIO34) |
 | PZEM-004T (TTL side only) | 5V | 3V3 (5V/VIN plus a 1k/2k divider on TX if it won't answer on 3V3) |
 | | GND | GND |
 | | TX | **RX2 / GPIO16** |

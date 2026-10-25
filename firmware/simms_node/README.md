@@ -175,7 +175,7 @@ The ESP32 simulation keeps providing the circuit readings. The camera provides o
    | PZEM-004T meters (all three share the bus) TX / RX | GPIO16 (RX2) / GPIO17 (TX2), 5 V supply |
    | PZEM CT coils | One around the lights circuit's live wire, one around the fans circuit's, one around the main supply's |
    | DHT11 | GPIO15 (10 kΩ pull-up) |
-   | LDR module AO | GPIO36 |
+   | LDR module DO (or AO) | GPIO34 (D34) |
    | Relay IN1 (lights) / IN2 (fans) | GPIO26 / GPIO27 (active-low boards: `RELAY_ACTIVE_LOW 1`) |
    | SSD1306 OLED (optional) | SDA GPIO21, SCL GPIO22 |
 
