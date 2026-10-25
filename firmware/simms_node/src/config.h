@@ -176,7 +176,11 @@
 // ---------------------------------------------------------
 
 #define PIN_DHT 15              // DHT22 (sim) / DHT11 (hw) data
+#if SIMULATION
 #define PIN_LDR 36              // LDR module AO (VP)
+#else
+#define PIN_LDR 34              // LDR module DO/AO (D34; pot pin is sim-only)
+#endif
 
 // Simulation inputs
 #define PIN_POT_VOLTAGE 34      // supply voltage knob
