@@ -63,9 +63,26 @@ function getFaultTypeLabel(faultType) {
   );
 }
 
-function getHistoryActionLabel(action) {
+// ticket_history rows: previous_status -> new_status, with a note.
+const HISTORY_LABELS = {
+  OPEN: "Ticket created",
+  RESOLVED: "Marked resolved",
+  REOPENED: "Reopened",
+  CLOSED: "Closed after verification",
+  AUTO_RESOLVED: "Closed automatically",
+};
+
+function getHistoryActionLabel(action, previousStatus) {
   if (!action) {
     return "Ticket updated";
+  }
+
+  if (action === "OPEN" && previousStatus) {
+    return "Opened again";
+  }
+
+  if (HISTORY_LABELS[action]) {
+    return HISTORY_LABELS[action];
   }
 
   return String(action)
@@ -726,7 +743,7 @@ export default function SupervisorTicketDetails() {
 
                       <DetailItem label="Device">
                         {fault.device_id
-                          ? `Device #${fault.device_id}`
+                          ? fault.device_name || `Device #${fault.device_id}`
                           : "Room-level"}
                       </DetailItem>
 
@@ -952,16 +969,17 @@ export default function SupervisorTicketDetails() {
                           <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
                             <p className="text-sm font-semibold text-slate-900">
                               {getHistoryActionLabel(
-                                entry.action ||
-                                  entry.action_type ||
-                                  entry.status
+                                entry.new_status ||
+                                  entry.action ||
+                                  entry.status,
+                                entry.previous_status
                               )}
                             </p>
 
-                            {entry.status && (
+                            {(entry.new_status || entry.status) && (
                               <StatusBadge
                                 status={
-                                  entry.status
+                                  entry.new_status || entry.status
                                 }
                                 size="sm"
                               />
@@ -976,9 +994,9 @@ export default function SupervisorTicketDetails() {
                             )}
                           </p>
 
-                          {entry.notes && (
+                          {(entry.note || entry.notes) && (
                             <p className="mt-2 whitespace-pre-wrap rounded-lg bg-slate-50 px-3 py-2 text-[13px] leading-relaxed text-slate-600 ring-1 ring-slate-100">
-                              {entry.notes}
+                              {entry.note || entry.notes}
                             </p>
                           )}
 
@@ -991,7 +1009,7 @@ export default function SupervisorTicketDetails() {
 
                               Updated by{" "}
                               <span className="font-medium text-slate-700">
-                                {entry.changed_by}
+                                {entry.changed_by_name || `user #${entry.changed_by}`}
                               </span>
                             </p>
                           )}

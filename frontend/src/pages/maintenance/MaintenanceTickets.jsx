@@ -514,7 +514,7 @@ function MaintenanceTickets() {
                                                     {fault?.device_id !== null &&
                                                         fault?.device_id !== undefined && (
                                                             <p className="num mt-0.5 text-[11px] text-slate-500">
-                                                                Device #{fault.device_id}
+                                                                {fault.device_name || `Device #${fault.device_id}`}
                                                             </p>
                                                         )}
                                                 </td>

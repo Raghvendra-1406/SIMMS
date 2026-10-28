@@ -135,3 +135,7 @@ firmware/simms_node/src/secrets.h
 
 # Person-detection model for the Pi camera node (onnxruntime, no PyTorch)
 !backend/models/weights/yolo11n.onnx
+
+Changes.md
+# End-to-end test runtime files (database, logs, screenshots)
+backend/scripts/e2e/.run/

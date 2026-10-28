@@ -418,6 +418,7 @@ void publishNodeStatus() {
   doc["uptime_s"] = millis() / 1000;
   doc["fw_version"] = FW_VERSION;
   doc["ip"] = WiFi.localIP().toString();
+  doc["ssid"] = WiFi.SSID();
   doc["simulation"] = (bool)SIMULATION;
   doc["buffered"] = bufferCount;
 
@@ -693,32 +694,81 @@ void onMqttMessage(char *topic, byte *payload, unsigned int length) {
 // Connectivity
 // ---------------------------------------------------------
 
-// Boot: wait up to WIFI_BOOT_TIMEOUT_MS, then carry on sampling
-// (readings are buffered) and let maintainWifi() keep trying.
-void connectWifi() {
-  Serial.printf("[wifi] connecting to %s", WIFI_SSID);
+// Known networks, tried in order. The second one (and its broker
+// address) is optional: WIFI_SSID_2 / WIFI_PASSWORD_2 / MQTT_HOST_2
+// in secrets.h.
+struct WifiNetwork {
+  const char *ssid;
+  const char *password;
+  const char *mqttHost;
+};
 
-  WiFi.mode(WIFI_STA);
-  WiFi.setAutoReconnect(true);
+const WifiNetwork WIFI_NETWORKS[] = {
+  {WIFI_SSID, WIFI_PASSWORD, MQTT_HOST},
+#if defined(WIFI_SSID_2)
+  {WIFI_SSID_2, WIFI_PASSWORD_2, MQTT_HOST_2},
+#endif
+};
 
-  if (WIFI_CHANNEL > 0) {
-    WiFi.begin(WIFI_SSID, WIFI_PASSWORD, WIFI_CHANNEL);
+const int WIFI_NETWORK_COUNT = sizeof(WIFI_NETWORKS) / sizeof(WIFI_NETWORKS[0]);
+
+int wifiIndex = 0;      // network currently used / being tried
+int wifiRetries = 0;    // reconnect attempts on it since the last switch
+
+const WifiNetwork &currentNetwork() {
+  return WIFI_NETWORKS[wifiIndex];
+}
+
+void beginWifi(int index) {
+  wifiIndex = index;
+  wifiRetries = 0;
+
+  const WifiNetwork &net = currentNetwork();
+
+  WiFi.disconnect();
+
+  // The fixed channel only applies to the first (Wokwi) network.
+  if (WIFI_CHANNEL > 0 && index == 0) {
+    WiFi.begin(net.ssid, net.password, WIFI_CHANNEL);
   } else {
-    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+    WiFi.begin(net.ssid, net.password);
   }
+}
 
+bool waitForWifi(unsigned long timeoutMs) {
   unsigned long started = millis();
 
-  while (WiFi.status() != WL_CONNECTED && millis() - started < WIFI_BOOT_TIMEOUT_MS) {
+  while (WiFi.status() != WL_CONNECTED && millis() - started < timeoutMs) {
     delay(250);
     Serial.print(".");
   }
 
-  if (WiFi.status() == WL_CONNECTED) {
-    Serial.printf(" connected, IP %s\n", WiFi.localIP().toString().c_str());
-  } else {
-    Serial.println(" not yet; sampling continues and readings are buffered");
+  return WiFi.status() == WL_CONNECTED;
+}
+
+// Boot: try each known network, then carry on sampling (readings are
+// buffered) and let maintainWifi() keep trying.
+void connectWifi() {
+  WiFi.mode(WIFI_STA);
+  WiFi.setAutoReconnect(true);
+
+  unsigned long perNetwork =
+    WIFI_NETWORK_COUNT > 1 ? WIFI_JOIN_TIMEOUT_MS : WIFI_BOOT_TIMEOUT_MS;
+
+  for (int i = 0; i < WIFI_NETWORK_COUNT; i++) {
+    Serial.printf("[wifi] connecting to %s", WIFI_NETWORKS[i].ssid);
+    beginWifi(i);
+
+    if (waitForWifi(perNetwork)) {
+      Serial.printf(" connected, IP %s\n", WiFi.localIP().toString().c_str());
+      lastWifiAttemptMs = millis();
+      return;
+    }
+
+    Serial.println(" no answer");
   }
+
+  Serial.println("[wifi] no network yet; sampling continues and readings are buffered");
 
   lastWifiAttemptMs = millis();
 }
@@ -733,7 +783,7 @@ void maintainWifi() {
     wasConnected = connected;
 
     if (connected) {
-      Serial.printf("[wifi] reconnected, IP %s\n", WiFi.localIP().toString().c_str());
+      Serial.printf("[wifi] connected to %s, IP %s\n", currentNetwork().ssid, WiFi.localIP().toString().c_str());
     } else {
       Serial.println("[wifi] lost; buffering readings");
     }
@@ -741,7 +791,15 @@ void maintainWifi() {
 
   if (!connected && millis() - lastWifiAttemptMs >= WIFI_RETRY_MS) {
     lastWifiAttemptMs = millis();
-    WiFi.reconnect();
+
+    // Out of range of this network: move on to the next one.
+    if (WIFI_NETWORK_COUNT > 1 && ++wifiRetries >= WIFI_RETRIES_PER_NETWORK) {
+      int next = (wifiIndex + 1) % WIFI_NETWORK_COUNT;
+      Serial.printf("[wifi] trying %s\n", WIFI_NETWORKS[next].ssid);
+      beginWifi(next);
+    } else {
+      WiFi.reconnect();
+    }
   }
 }
 
@@ -761,7 +819,10 @@ void connectMqtt() {
   char willPayload[64];
   serializeJson(will, willPayload, sizeof(willPayload));
 
-  Serial.printf("[mqtt] connecting to %s:%d ... ", MQTT_HOST, MQTT_PORT);
+  // Each network may reach the broker at a different address.
+  mqtt.setServer(currentNetwork().mqttHost, MQTT_PORT);
+
+  Serial.printf("[mqtt] connecting to %s:%d ... ", currentNetwork().mqttHost, MQTT_PORT);
 
   const char *username = strlen(MQTT_USERNAME) ? MQTT_USERNAME : nullptr;
   const char *password = strlen(MQTT_PASSWORD) ? MQTT_PASSWORD : nullptr;
@@ -839,7 +900,7 @@ void setup() {
   wifiClient.setInsecure();
 #endif
 
-  mqtt.setServer(MQTT_HOST, MQTT_PORT);
+  mqtt.setServer(currentNetwork().mqttHost, MQTT_PORT);
   mqtt.setCallback(onMqttMessage);
   mqtt.setBufferSize(1024);
   mqtt.setKeepAlive(MQTT_KEEPALIVE_S);

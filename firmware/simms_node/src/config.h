@@ -53,6 +53,13 @@
 #ifndef WIFI_CHANNEL
 #define WIFI_CHANNEL 0
 #endif
+
+// Optional second network (e.g. home Wi-Fi + phone hotspot). With a
+// local broker each network has its own laptop IP: MQTT_HOST_2 (falls
+// back to MQTT_HOST, which is right for a cloud broker).
+#if defined(WIFI_SSID_2) && !defined(MQTT_HOST_2)
+#define MQTT_HOST_2 MQTT_HOST
+#endif
 #endif
 
 #ifndef MQTT_PORT
@@ -125,6 +132,11 @@
 #define WIFI_RETRY_MS 5000
 #define WIFI_BOOT_TIMEOUT_MS 20000
 
+// With two networks: retries on one network before trying the other
+// (3 x WIFI_RETRY_MS = 15 s), and how long boot waits for each.
+#define WIFI_RETRIES_PER_NETWORK 3
+#define WIFI_JOIN_TIMEOUT_MS 10000
+
 
 // ---------------------------------------------------------
 // Virtual camera (simulation only)
@@ -168,7 +180,9 @@
 #define PZEM_ADDR_MAIN 0x03
 
 // Set to 0 when no meter is fitted on the main supply.
-#define HAS_MAIN_METER 1
+#ifndef HAS_MAIN_METER
+#define HAS_MAIN_METER 1   // no meter on the main supply? set 0 here or in secrets.h
+#endif
 
 
 // ---------------------------------------------------------

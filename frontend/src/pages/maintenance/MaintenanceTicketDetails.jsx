@@ -392,7 +392,7 @@ export default function MaintenanceTicketDetails() {
                 <span className="text-slate-500">
                   ·{" "}
                   {fault.device_id !== null && fault.device_id !== undefined
-                    ? <span className="num">Device #{fault.device_id}</span>
+                    ? <span className="num">{fault.device_name || `Device #${fault.device_id}`}</span>
                     : "Room-level fault"}
                 </span>
               )}
@@ -577,7 +577,7 @@ export default function MaintenanceTicketDetails() {
                 <DetailItem label="Device" mono={fault.device_id !== null && fault.device_id !== undefined}>
                   {fault.device_id !== null &&
                   fault.device_id !== undefined
-                    ? `Device #${fault.device_id}`
+                    ? fault.device_name || `Device #${fault.device_id}`
                     : "Room-level fault"}
                 </DetailItem>
                 <DetailItem label="Confidence" mono>

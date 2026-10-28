@@ -4,6 +4,10 @@ from dependencies.auth_dependencies import (
     get_current_user,
 )
 
+from database.repositories.user_repository import (
+    get_user_by_id,
+)
+
 from schemas.ticket_history_schema import (
     TicketHistoryResponse,
 )
@@ -30,6 +34,8 @@ def history_to_response(history):
         "new_status": history[3],
         "changed_at": history[4],
         "changed_by": history[5],
+        "changed_by_name": (get_user_by_id(history[5]) or [None, None])[1]
+        if history[5] is not None else None,
         "note": history[6],
     }
 

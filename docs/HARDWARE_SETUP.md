@@ -91,7 +91,14 @@ Create it once with `copy src\secrets.example.h src\secrets.h`, then edit:
 #define WIFI_SSID "Galaxy_M04_9212"
 #define WIFI_PASSWORD "your-hotspot-password"
 #define MQTT_HOST "192.168.14.122"     // laptop IPv4 from ipconfig
+
+// Optional second network (e.g. home Wi-Fi + phone hotspot at the demo).
+// The ESP32 tries the first, then the second, and switches if one goes out of range.
+#define WIFI_SSID_2 "home-wifi-name"
+#define WIFI_PASSWORD_2 "home-wifi-password"
+#define MQTT_HOST_2 "192.168.1.5"      // laptop IP on that network; leave out with a cloud broker
 ```
+**Cloud broker (HiveMQ):** set `MQTT_HOST` to the cluster host, and add `MQTT_PORT 8883`, `MQTT_USE_TLS 1`, `MQTT_USERNAME`, `MQTT_PASSWORD` and the same `TOPIC_PREFIX` as Render. `MQTT_HOST_2` isn't needed, because the host is the same on every network.
 
 ### 2.3 Build, upload, monitor
 **In VS Code** (PlatformIO IDE extension, *File → Open Folder → `firmware/simms_node`*):
@@ -134,7 +141,46 @@ All modules use **3V3 and GND** from the ESP32. Share them on a breadboard rail.
 - **LDR threshold:** turn the blue knob until the module's LED just flips under room light. The dashboard then shows 0 % (dark) or 100 % (bright).
 - **PZEM:** don't touch the screw terminals (AC voltage and CT coil) without a qualified supervisor. The meter only answers once its AC side is powered.
 
-### 2.5 ESP32 troubleshooting
+### 2.5 PZEM-004T test and address setup (mains: qualified supervisor present)
+**Safety first:**
+- All AC wiring is done **with the plug pulled out**.
+- Every screw terminal must be covered; use a fused plug or MCB.
+- Never touch the PZEM board, the bulb holder or bare wires while the plug is in.
+
+**Test rig (one meter at a time):**
+```
+Wall plug (fused) ── L ──┬──────────────► PZEM "L" (voltage input)
+                         │
+                         └──[ CT coil ]──► bulb holder ── bulb ──┐
+                     (live wire passes                           │
+                      THROUGH the coil)                          │
+Wall plug ────────── N ──┬──────────────► PZEM "N"               │
+                         └───────────────────────────────────────┘
+CT coil leads ─► the PZEM's CT terminals
+```
+Follow the labels printed on your PZEM board. Only the **live** wire to the bulb goes through the coil, never live and neutral together.
+
+**Steps:**
+1. Wire the TTL side to the ESP32 (table in 2.4). Leave `secrets.h` as it is.
+2. Flash the bench tool and open the monitor:
+   ```powershell
+   cd firmware\simms_node
+   pio run -e pzem_tool -t upload
+   pio device monitor -b 115200
+   ```
+   In VS Code: Project Tasks → **pzem_tool** → Upload, then Monitor.
+3. Insert the plug, with the bulb switched **off**. Expect `V≈230  A=0.000  W=0.0  Hz=50.0`.
+4. Switch the bulb **on**. Current and power rise; for a 9 W LED bulb, expect `A≈0.04–0.08 W≈9`.
+5. Type **`1`** and press Enter to make this meter the **lights** meter (address 0x01). For a second meter, connect it **alone** and type **`2`** (fans, 0x02).
+6. Flash the normal firmware again: Project Tasks → **hw** → Upload. With no main-supply meter, first add `#define HAS_MAIN_METER 0` to `secrets.h`.
+
+| Tool output | Meaning |
+|---|---|
+| `no answer from the meter` | AC side not powered, TX/RX not crossed (PZEM TX → GPIO16), GND not shared, or more than one meter connected |
+| `V` correct but `A=0.000` with the bulb on | Live wire not through the coil, coil not plugged in, or the load is too small (under ~0.01 A) |
+| `Setting address ... FAILED` | Same causes as `no answer` |
+
+### 2.6 ESP32 troubleshooting
 | Log | Fix |
 |---|---|
 | `[wifi] connecting.....` forever | Wrong SSID or password in `secrets.h`, the network is 5 GHz-only, or WPA3. Use 2.4 GHz WPA2. |

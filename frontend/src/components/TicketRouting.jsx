@@ -21,7 +21,7 @@ export function AssigneeLabel({ ticket, className = "" }) {
   }
 
   return (
-    <span className={`inline-flex items-center gap-1.5 ${className}`}>
+    <span className={`inline-flex flex-wrap items-center gap-x-1.5 ${className}`}>
       <Icon name="user" className="h-3.5 w-3.5 text-slate-400" />
       <span className="font-medium text-slate-800">{ticket.assigned_to_name}</span>
       {ticket.assigned_to_team && (

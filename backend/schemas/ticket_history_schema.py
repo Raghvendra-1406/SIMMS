@@ -25,6 +25,7 @@ class TicketHistoryResponse(BaseModel):
     new_status: str
     changed_at: datetime
     changed_by: int | None
+    changed_by_name: str | None = None
     note: str | None
 
     model_config = ConfigDict(from_attributes=True)

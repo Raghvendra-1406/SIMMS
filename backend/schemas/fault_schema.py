@@ -21,6 +21,8 @@ class FaultEventResponse(BaseModel):
     fault_id: int
     room_id: int
     device_id: int | None
+    # "Fan 2" / "Camera"; None for room-level faults
+    device_name: str | None = None
     fault_type: str
     detected_at: datetime
     confirmed_at: datetime | None

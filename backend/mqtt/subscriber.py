@@ -12,6 +12,7 @@ from config.settings import (
     MQTT_BROKER_HOST,
     MQTT_BROKER_PORT,
     MQTT_CLIENT_ID,
+    NODE_OFFLINE_SECONDS,
 )
 
 from mqtt.connection import (
@@ -84,7 +85,9 @@ UNIT_BATCHES = {
 
 # last_seen / node heartbeat writes are throttled per device/node:
 # one write per interval is enough and saves database round trips.
-LAST_SEEN_WRITE_INTERVAL_SECONDS = 30
+# Kept well below NODE_OFFLINE_SECONDS, or a node that is talking
+# normally could look stale to the offline check.
+LAST_SEEN_WRITE_INTERVAL_SECONDS = min(30, max(1, NODE_OFFLINE_SECONDS // 3))
 
 
 # The paho network thread only enqueues messages; one worker

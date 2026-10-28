@@ -672,7 +672,7 @@ export default function SupervisorStatistics() {
                         <span className="text-slate-600">{label}</span>
                         <ScoreBar value={(source?.coverage ?? 0) * 100} />
                         <span className="num text-right font-semibold text-slate-900">
-                          {source ? formatPercent(source.coverage) : "0%"}
+                          {!source ? "0%" : source.coverage > 0 && source.coverage < 0.01 ? "<1%" : formatPercent(source.coverage)}
                         </span>
                       </div>
                     ))}

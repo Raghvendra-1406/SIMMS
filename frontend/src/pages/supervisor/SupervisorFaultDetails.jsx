@@ -331,7 +331,7 @@ export default function SupervisorFaultDetails() {
                         </span>
                         <span aria-hidden="true">·</span>
                         <span className="num">
-                          {fault.device_id ? `Device #${fault.device_id}` : "Room-level fault"}
+                          {fault.device_id ? fault.device_name || `Device #${fault.device_id}` : "Room-level fault"}
                         </span>
                         <span aria-hidden="true">·</span>
                         <span className="num">Fault #{fault.fault_id}</span>
@@ -374,7 +374,7 @@ export default function SupervisorFaultDetails() {
                       <DetailItem label="Classroom">{classroom?.room_name || `Room ${fault.room_id}`}</DetailItem>
                       <DetailItem label="Room ID" mono>{fault.room_id ?? "—"}</DetailItem>
                       <DetailItem label="Device" mono>
-                        {fault.device_id ? `Device #${fault.device_id}` : "Room-level fault"}
+                        {fault.device_id ? fault.device_name || `Device #${fault.device_id}` : "Room-level fault"}
                       </DetailItem>
                       <DetailItem label="Abnormal observations" mono>{fault.abnormal_count ?? "—"}</DetailItem>
                       <DetailItem label="Confidence" mono>{formatConfidence(fault.confidence)}</DetailItem>

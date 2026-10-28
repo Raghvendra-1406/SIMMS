@@ -12,6 +12,17 @@
 // IPv4 address of the laptop running Mosquitto (ipconfig -> Wi-Fi).
 #define MQTT_HOST "192.168.1.10"
 
+// Optional second network, tried when the first is out of range
+// (e.g. home Wi-Fi + phone hotspot at the demo venue). With a local
+// broker the laptop has a different IP on it: set MQTT_HOST_2.
+// With a cloud broker leave MQTT_HOST_2 out (same host everywhere).
+// #define WIFI_SSID_2 "phone-hotspot-name"
+// #define WIFI_PASSWORD_2 "phone-hotspot-password"
+// #define MQTT_HOST_2 "192.168.43.10"
+
+// No PZEM on the room's main supply (only lights/fans meters):
+// #define HAS_MAIN_METER 0
+
 // Optional: must match MQTT_TOPIC_PREFIX in backend/.env.
 // #define TOPIC_PREFIX ""
 

@@ -5,6 +5,10 @@ from dependencies.auth_dependencies import (
     require_admin,
 )
 
+from database.repositories.device_repository import (
+    get_device_by_id,
+)
+
 from schemas.fault_schema import (
     FaultEventCreate,
     FaultEventResponse,
@@ -42,11 +46,21 @@ router = APIRouter(
 ALLOWED_FAULT_TYPES = ALL_FAULT_TYPES
 
 
+def device_name_of(device_id):
+    if device_id is None:
+        return None
+
+    device = get_device_by_id(device_id)
+
+    return device[3] if device else None
+
+
 def fault_to_response(fault):
     return {
         "fault_id": fault[0],
         "room_id": fault[1],
         "device_id": fault[2],
+        "device_name": device_name_of(fault[2]),
         "fault_type": fault[3],
         "detected_at": fault[4],
         "confirmed_at": fault[5],
